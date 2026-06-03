@@ -2,9 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Aplikacja używa Bluetooth do połączenia z kontrolerem Triki i odczytu ruchów podczas rozgrywki.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Aplikacja potrzebuje Bluetooth do wykrywania i parowania kontrolera Triki.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikacja używa aparatu do skanowania kodów QR, zdjęć minifigurek i trybu AR walki z bossem.</string>
+	<key>NSWorldSensingUsageDescription</key>
+	<string>Tryb AR wykrywa minifigurki na stole podczas walki z bossem.</string>
 </dict>
 </plist>

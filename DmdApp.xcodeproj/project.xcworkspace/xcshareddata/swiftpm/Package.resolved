@@ -1,0 +1,24 @@
+{
+  "originHash" : "f9494d72488846f81adf64256691c44ab67f63dd36512a88a7d03b9e0f13e802",
+  "pins" : [
+    {
+      "identity" : "llama.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/llama.swift",
+      "state" : {
+        "revision" : "07261d8a4a89088ad1c50490699d97bd1430c861",
+        "version" : "2.8665.0"
+      }
+    },
+    {
+      "identity" : "veltokit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/koderhack/veltokit",
+      "state" : {
+        "branch" : "main",
+        "revision" : "69e3d77d2c2c44954c81892f9a9ca79e0f80c5a6"
+      }
+    }
+  ],
+  "version" : 3
+}
