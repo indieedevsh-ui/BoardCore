@@ -1,4 +1,4 @@
-const ROUTES = ["menu", "og"];
+const ROUTES = ["menu", "og", "pobierz", "licencja"];
 
 let audioCtx;
 
@@ -25,8 +25,10 @@ function playClickSound(type = "soft") {
   osc.frequency.setValueAtTime(isTab ? 360 : 300, now);
   osc.frequency.exponentialRampToValueAtTime(isTab ? 500 : 420, now + 0.06);
 
+  const peakGain = isTab ? 0.14 : 0.12;
+
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.045, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
 
   osc.connect(gain);
@@ -47,11 +49,11 @@ function setActiveView(route) {
   views.forEach((view) => {
     const isActive = view.dataset.view === safeRoute;
     view.hidden = !isActive;
-    view.classList.remove("panel--animate");
+    view.classList.remove("view--animate");
 
     if (isActive) {
       requestAnimationFrame(() => {
-        view.classList.add("panel--animate");
+        view.classList.add("view--animate");
         const tiles = view.querySelectorAll(".tile-animate");
         tiles.forEach((tile, index) => {
           tile.style.setProperty("--i", String(index));
@@ -86,12 +88,9 @@ function wireShortcuts() {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === "1") setActiveView("menu");
     if (e.key === "2") setActiveView("og");
+    if (e.key === "3") setActiveView("pobierz");
+    if (e.key === "4") setActiveView("licencja");
   });
-}
-
-function wireMeta() {
-  const yearEl = document.querySelector("[data-year]");
-  if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 }
 
 function wireButtonSounds() {
@@ -102,7 +101,6 @@ function wireButtonSounds() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  wireMeta();
   wireTabs();
   wireShortcuts();
   wireButtonSounds();
