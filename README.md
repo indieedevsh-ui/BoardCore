@@ -1,6 +1,6 @@
-# BoardCore — strona aplikacji
+# BoardCore
 
-Lekka strona (HTML/CSS/JS) z dwoma zakładkami: **Menu** i **O grze**.
+Projekt gry planszowej BoardCore (iOS) oraz lekka strona (HTML/CSS/JS).
 
 ## Uruchomienie (bez serwera)
 
