@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+
+    <title>BoardCore — strona aplikacji</title>
+    <meta
+      name="description"
+      content="BoardCore — elegancka strona aplikacji do gry planszowej. Menu i O grze."
+    />
+
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Przejdź do treści</a>
+
+    <div class="bg" aria-hidden="true">
+      <div class="bg__grid"></div>
+      <div class="blob blob--1"></div>
+      <div class="blob blob--2"></div>
+      <div class="blob blob--3"></div>
+      <div class="grain"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="container topbar__inner">
+        <div class="brand" aria-label="BoardCore">
+          <div class="brand__mark" aria-hidden="true">
+            <span class="dot dot--a"></span>
+            <span class="dot dot--b"></span>
+            <span class="dot dot--c"></span>
+            <span class="dot dot--d"></span>
+          </div>
+          <div class="brand__text">
+            <div class="brand__name">BoardCore</div>
+            <div class="brand__tagline">Aplikacja do gry planszowej</div>
+          </div>
+        </div>
+
+        <nav class="tabs" aria-label="Zakładki">
+          <button class="tab" type="button" data-route="menu" aria-selected="true">Menu</button>
+          <button class="tab" type="button" data-route="og" aria-selected="false">O grze</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="content" class="container content">
+      <section class="panel" data-view="menu" role="region" aria-label="Menu">
+        <article class="welcome-card tile-animate">
+          <h1 class="h1">Witaj</h1>
+          <p class="lead">
+            Interaktywna gra planszowa, w której to gracze dążą do zyskania w 10 zdolności. Spróbuj
+            ze znajomymi, przyjaciółmi, rodziną zagrać i zdobyć jako pierwszy osiągnąć główny cel
+            poprzez walki z bossem, Areny PvP oraz polami Artefaktów.
+          </p>
+        </article>
+
+        <div class="actions tile-animate">
+          <a
+            class="btn btn--github"
+            href="https://github.com/indieedevsh-ui/DmdApp"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub: repozytorium
+          </a>
+        </div>
+      </section>
+
+      <section class="og-view" data-view="og" hidden role="region" aria-label="O grze">
+        <div class="brand-block tile-animate">
+          <h2 class="brand-title">BoardCore</h2>
+          <p class="app-version">Wersja <span class="app-version__num">1.0</span></p>
+        </div>
+
+        <div class="features-grid" aria-label="Funkcje wersji 1.0">
+          <div class="feature-tile tile-animate">
+            <span class="feature-tile__icon" aria-hidden="true">▣</span>
+            <h3 class="feature-tile__title">Skan QR</h3>
+            <p class="feature-tile__text">
+              Pozwala na wykrywanie odpowiednich elementów gry.
+            </p>
+          </div>
+          <div class="feature-tile tile-animate">
+            <span class="feature-tile__icon" aria-hidden="true">✦</span>
+            <h3 class="feature-tile__title">LLM</h3>
+            <p class="feature-tile__text">
+              Interpretuje kampanie przygotowaną przez AI i dołącza ją do rozgrywki.
+            </p>
+          </div>
+          <div class="feature-tile tile-animate">
+            <span class="feature-tile__icon" aria-hidden="true">💾</span>
+            <h3 class="feature-tile__title">Zapis gry</h3>
+            <p class="feature-tile__text">
+              Nie musisz kończyć od razu rozgrywki — możesz przerwać i wrócić do niej, kiedy chcesz.
+            </p>
+          </div>
+          <div class="feature-tile tile-animate">
+            <span class="feature-tile__icon" aria-hidden="true">⚙</span>
+            <h3 class="feature-tile__title">Edytor</h3>
+            <p class="feature-tile__text">
+              Umożliwia zmienianie aktualnych wartości w rozgrywce — od funduszy po dodawanie
+              własnych ścieżek mocy.
+            </p>
+          </div>
+        </div>
+
+        <div class="about-stack">
+          <article class="about-card tile-animate">
+            <h3 class="about-card__title">Jakie mechaniki zawiera ta gra</h3>
+            <ol class="mechanic-list">
+              <li>
+                <strong>Walka z Bossem</strong> — walka podobna do mechaniki kamień–papier–nożyce
+                (gracz musi przebić atak bossa). Gdy gracz przegra, traci całe zdrowie i
+                ostatecznie znika z gry.
+              </li>
+              <li>
+                <strong>Artefakt</strong> — pole pozwalające na wylosowanie jednej zdolności, innych
+                pomocnych doładowań postaci; jest też mała szansa na wylosowanie pechowego rezultatu.
+              </li>
+              <li>
+                <strong>Karty Specjalne</strong> — masz 50% szans na dobry podarunek i 50% na zły.
+              </li>
+              <li>
+                <strong>Arena PvP</strong> — na tym polu gracze mogą walczyć ze sobą. Walka polega
+                na szybkim klikaniu znikających kuleczek (ładują moc uderzenia). Wygrana osoba
+                dostaje 50% funduszy przegranego oraz jego 50% XP.
+              </li>
+              <li>
+                <strong>Ścieżki Mocy</strong> — umiejętności z danej ścieżki dają lekką przewagę nad
+                graczami, którzy w ogóle nie korzystają z żadnej ze ścieżek.
+              </li>
+              <li>
+                <strong>Sklepik Handlowy</strong> — pozwala na zakup lub sprzedaż danych przedmiotów
+                (broni, pancerzy lub pędzli).
+              </li>
+            </ol>
+          </article>
+          <article class="about-card tile-animate">
+            <h3 class="about-card__title">Jaki jest cel gry</h3>
+            <p class="about-card__text">
+              Osiągnij zwycięstwo poprzez strategię, współpracę lub rywalizację — w zależności od
+              wybranej kampanii i zasad sesji.
+            </p>
+          </article>
+          <article class="about-card tile-animate">
+            <h3 class="about-card__title">Kampanie Fabularne</h3>
+            <p class="about-card__text">
+              Prowadź rozgrywkę w ramach narracyjnych kampanii z rozwojem postaci, wydarzeniami i
+              kolejnymi rozdziałami historii.
+            </p>
+          </article>
+          <article class="about-card tile-animate">
+            <h3 class="about-card__title">Plansza</h3>
+            <p class="about-card__text">
+              Dynamiczna plansza z polami, strefami i punktami interakcji — sercem każdej sesji
+              BoardCore.
+            </p>
+          </article>
+          <article class="about-card about-card--github tile-animate">
+            <h3 class="about-card__title">Link do Github</h3>
+            <p class="about-card__text">
+              Kod źródłowy, aktualizacje i zgłoszenia błędów — wszystko w repozytorium projektu.
+            </p>
+            <a
+              class="btn btn--github btn--sm"
+              href="https://github.com/indieedevsh-ui/DmdApp"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Otwórz repozytorium
+            </a>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer__inner">
+        <div class="footer__left">
+          <span class="muted">©</span> <span data-year></span> BoardCore
+        </div>
+        <div class="footer__right">
+          <span class="muted">Skróty:</span> <kbd>1</kbd> Menu · <kbd>2</kbd> O grze
+        </div>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
