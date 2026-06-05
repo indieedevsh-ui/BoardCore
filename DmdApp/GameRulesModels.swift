@@ -85,89 +85,12 @@ struct SpecialCardGameRules: Codable, Hashable {
     var customCards: [SpecialCardDefinition] = SpecialCardDefinition.defaultDeck()
 }
 
-enum TrikiGestureAction: String, CaseIterable, Codable, Hashable, Identifiable {
-    case none
-    case listDown
-    case listUp
-    case selectOption
-    case skipTurn
-    case saveGame
-    case showItems
-    case showOwnStats
-    case useStealAbility
-    case attack
-    case defense
-    case strongAttack
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .none: "Nic"
-        case .listDown: "Zejście listy na dół"
-        case .listUp: "Zejście listy do góry"
-        case .selectOption: "Wybranie opcji"
-        case .skipTurn: "Pominięcie tury"
-        case .saveGame: "Zapisanie gry"
-        case .showItems: "Pokazanie ekwipunku"
-        case .showOwnStats: "Pokazanie swoich statystyk"
-        case .useStealAbility: "Użycie zdolności okradania"
-        case .attack: "Atak"
-        case .defense: "Obrona"
-        case .strongAttack: "Mocny atak"
-        }
-    }
-}
-
-struct TrikiGestureRules: Codable, Hashable {
-    /// Pochylenie / przesunięcie — w grze obsługiwane przez krótki klik fizyczny.
-    var slide: TrikiGestureAction = .none
-    var rotateLeft: TrikiGestureAction = .none
-    var rotateRight: TrikiGestureAction = .none
-    /// Fizyczny przycisk: krótki klik i długie przytrzymanie są w GameView; tu tylko gesty z reguł DevCentrum.
-    var click: TrikiGestureAction = .none
-    var shake: TrikiGestureAction = .none
-
-    enum CodingKeys: String, CodingKey {
-        case slide, rotateLeft, rotateRight, click, shake
-    }
-
-    init(
-        slide: TrikiGestureAction = .listDown,
-        rotateLeft: TrikiGestureAction = .none,
-        rotateRight: TrikiGestureAction = .none,
-        click: TrikiGestureAction = .selectOption,
-        shake: TrikiGestureAction = .none
-    ) {
-        self.slide = slide
-        self.rotateLeft = rotateLeft
-        self.rotateRight = rotateRight
-        self.click = click
-        self.shake = shake
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        slide = try container.decodeIfPresent(TrikiGestureAction.self, forKey: .slide) ?? .listDown
-        rotateLeft = try container.decodeIfPresent(TrikiGestureAction.self, forKey: .rotateLeft) ?? .none
-        rotateRight = try container.decodeIfPresent(TrikiGestureAction.self, forKey: .rotateRight) ?? .none
-        click = try container.decodeIfPresent(TrikiGestureAction.self, forKey: .click) ?? .selectOption
-        shake = try container.decodeIfPresent(TrikiGestureAction.self, forKey: .shake) ?? .none
-        // Wcześniej listę obsługiwało potrząśnięcie — przenieś na pochylenie do przodu.
-        if slide == .none, shake == .listDown {
-            slide = .listDown
-            shake = .none
-        }
-    }
-}
-
 struct GameRulesConfiguration: Codable, Hashable {
     var startField: StartFieldGameRules = StartFieldGameRules()
     var shop: ShopGameRules = ShopGameRules()
     var bossFight: BossFightGameRules = BossFightGameRules()
     var artifact: ArtifactGameRules = ArtifactGameRules()
     var specialCard: SpecialCardGameRules = SpecialCardGameRules()
-    var trikiGestures: TrikiGestureRules = TrikiGestureRules()
 
     enum CodingKeys: String, CodingKey {
         case startField
@@ -175,7 +98,6 @@ struct GameRulesConfiguration: Codable, Hashable {
         case bossFight
         case artifact
         case specialCard
-        case trikiGestures
     }
 
     init() {}
@@ -187,7 +109,6 @@ struct GameRulesConfiguration: Codable, Hashable {
         bossFight = try container.decodeIfPresent(BossFightGameRules.self, forKey: .bossFight) ?? BossFightGameRules()
         artifact = try container.decodeIfPresent(ArtifactGameRules.self, forKey: .artifact) ?? ArtifactGameRules()
         specialCard = try container.decodeIfPresent(SpecialCardGameRules.self, forKey: .specialCard) ?? SpecialCardGameRules()
-        trikiGestures = try container.decodeIfPresent(TrikiGestureRules.self, forKey: .trikiGestures) ?? TrikiGestureRules()
     }
 
     static func defaults() -> GameRulesConfiguration { GameRulesConfiguration() }
@@ -208,7 +129,6 @@ enum GameRulesFieldKind: String, CaseIterable, Identifiable {
     case bossFight
     case artifact
     case specialCard
-    case trikiGestures
 
     var id: String { rawValue }
 
@@ -219,7 +139,6 @@ enum GameRulesFieldKind: String, CaseIterable, Identifiable {
         case .bossFight: "Walka z Bossem"
         case .artifact: "Artefakt"
         case .specialCard: "Karta Specjalna"
-        case .trikiGestures: "Gesty Triki"
         }
     }
 
@@ -230,7 +149,6 @@ enum GameRulesFieldKind: String, CaseIterable, Identifiable {
         case .bossFight: "figure.stand.line.dotted.figure.stand"
         case .artifact: "sparkles.rectangle.stack.fill"
         case .specialCard: "rectangle.on.rectangle.angled"
-        case .trikiGestures: "dot.radiowaves.left.and.right"
         }
     }
 
@@ -241,7 +159,6 @@ enum GameRulesFieldKind: String, CaseIterable, Identifiable {
         case .bossFight: (0.92, 0.32, 0.38)
         case .artifact: (0.55, 0.38, 0.98)
         case .specialCard: (0.38, 0.62, 0.95)
-        case .trikiGestures: (0.2, 0.85, 0.9)
         }
     }
 }

@@ -15,8 +15,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/koderhack/veltokit",
       "state" : {
-        "branch" : "main",
-        "revision" : "69e3d77d2c2c44954c81892f9a9ca79e0f80c5a6"
+        "revision" : "cfc407add10b93d57b04fb93ddfb5777be650c78"
       }
     }
   ],

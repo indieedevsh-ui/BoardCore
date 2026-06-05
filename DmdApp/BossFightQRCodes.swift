@@ -57,8 +57,7 @@ enum BossFightScanParser {
     ) -> GameplaySessionAbility? {
         guard let id = QRCodeParser.normalizedID(from: raw) else { return nil }
         return pool.abilities.first { ability in
-            ability.numericId == id
-                && pool.availability[ability.id] == .held(by: playerID)
+            ability.numericId == id && pool.hasCollected(ability.id, for: playerID)
         }
     }
 }

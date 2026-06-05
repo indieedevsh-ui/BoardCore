@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// Kody QR zdarzeń w rozgrywce (zakres 2001–2005).
+/// Kody QR zdarzeń w rozgrywce (zakres 2001–2006).
 /// W generatorze QR wpisz sam numer, np. `2001`.
 enum QRGameEventCode: String, CaseIterable, Identifiable {
     case startField = "2001"
@@ -13,6 +13,7 @@ enum QRGameEventCode: String, CaseIterable, Identifiable {
     case bossFight = "2003"
     case shop = "2004"
     case specialCard = "2005"
+    case arenaPvP = "2006"
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum QRGameEventCode: String, CaseIterable, Identifiable {
         case .bossFight: "Walka z bossem"
         case .shop: "Sklepik handlowy"
         case .specialCard: "Karta specjalna"
+        case .arenaPvP: "Arena PvP"
         }
     }
 
@@ -33,6 +35,7 @@ enum QRGameEventCode: String, CaseIterable, Identifiable {
         case .bossFight: "shield.lefthalf.filled"
         case .shop: "cart.fill"
         case .specialCard: "rectangle.on.rectangle.angled"
+        case .arenaPvP: "figure.boxing"
         }
     }
 
@@ -48,6 +51,8 @@ enum QRGameEventCode: String, CaseIterable, Identifiable {
             "Sklepik handlowy — kupuj i sprzedawaj przedmioty z kreatora."
         case .specialCard:
             "Karta specjalna — losujesz efekt pozytywny lub negatywny z puli 20 kart."
+        case .arenaPvP:
+            "Arena PvP — skan AR dwóch graczy (4001–4004), walka na energię (zdrowie × 2,5)."
         }
     }
 
@@ -63,6 +68,7 @@ enum QRGameEventCode: String, CaseIterable, Identifiable {
         case "BOSS", "WALKABOSSEM", "WALKA-BOSSEM": return .bossFight
         case "SKLEP", "SHOP", "HANDLOWY", "SKLEPIK": return .shop
         case "KARTA", "SPECIAL", "KARTA-SPECJALNA", "SPECIALCARD": return .specialCard
+        case "ARENA", "PVP", "ARENAPVP", "ARENA-PVP": return .arenaPvP
         default: return nil
         }
     }

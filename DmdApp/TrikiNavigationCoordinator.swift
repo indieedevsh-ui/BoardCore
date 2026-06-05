@@ -2,18 +2,13 @@
 //  TrikiNavigationCoordinator.swift
 //  DmdApp
 //
+//  Sterowanie Triki przez VeltoKit (`MotionSDK` + `GameInput`).
+//
 
 import Foundation
 import Observation
 import SwiftUI
-#if canImport(VeltoKit)
 import VeltoKit
-#endif
-
-struct TrikiFocusButton: Identifiable, Hashable {
-    let id: String
-    let title: String
-}
 
 struct TrikiFocusRegistration {
     let id: UUID
@@ -28,6 +23,8 @@ struct TrikiFocusRegistration {
 @Observable
 @MainActor
 final class TrikiNavigationCoordinator {
+    let motion = MotionSDK()
+
     var isEnabled = false
     var isBlocked = false
     var selectionIndex = 0
@@ -43,18 +40,39 @@ final class TrikiNavigationCoordinator {
     var debugButtonHeld = false
     var debugShake = false
     var debugClick = false
+    var debugSwingPhase = "—"
+    var debugSwingMotion: Double = 0
+    var debugSwingGyro: Double = 0
+    var debugSwingPosY: Double = 0
+    var debugRelY: Double = 0
+    var debugSensorSpeed: Double = 0
+    var debugSensorMotion: Double = 0
+    var debugConnectedRSSI: Int?
 
     var lastMotionGesture: TrikiInferredGestureKind?
+    var lastMotionGestureDetail = ""
     private(set) var motionGestureRevision = 0
+    private(set) var lastGameInput = GameInput()
 
-    private var resolvedDirection: TrikiResolvedDirection = .center
-    private var previousShakeForGesture = false
-    private var lastSlideGestureAt: TimeInterval = 0
+    var activityLog: TrikiControllerLogStore?
+
+    var isBLEConnected: Bool { motion.isConnected }
+    var isBLEReceiving: Bool { motion.isReceiving }
+    var livePointerX: Double = 0
+    var isTrikiConnectionActive: Bool { isEnabled && pollTask != nil }
+    var hasCachedBLEDevice: Bool { motion.hasCachedBLEDevice }
+    var trikiBLEModeLabel: String {
+        switch motion.trikiBLEMode {
+        case .fast: "szybki"
+        case .normal: "normalny"
+        case .lowPower: "oszczędny"
+        case .unknown: "nieznany"
+        }
+    }
 
     private var registrationStack: [TrikiFocusRegistration] = []
     private var pollTask: Task<Void, Never>?
     private var overlayHideTask: Task<Void, Never>?
-    private var reconnectAttemptAt: TimeInterval = 0
     private var trikiButtonHeldLastFrame = false
     private var trikiButtonPressBeganAt: TimeInterval?
     private var trikiLongPressActivated = false
@@ -64,12 +82,15 @@ final class TrikiNavigationCoordinator {
     private var connectionHoldCount = 0
     private var pairingUIActive = false
 
-#if canImport(VeltoKit)
-    private var motionSDK: MotionSDK?
-#endif
+    private var previousPointerDirection: PointerDirection = .center
+    private var previousShake = false
+    private var previousFlick = false
+    private var previousShot = false
+    private var lastMotionGestureAt: TimeInterval = 0
 
     private static let shortClickMaxDuration: TimeInterval = 0.42
-    var longPressHoldDuration: TimeInterval = 1.5
+    private static let motionGestureCooldown: TimeInterval = 0.38
+    var longPressHoldDuration: TimeInterval = 0.8
 
     func setLongPressHoldDuration(_ duration: TimeInterval) {
         longPressHoldDuration = max(0.2, duration)
@@ -78,18 +99,6 @@ final class TrikiNavigationCoordinator {
     var activeButtons: [TrikiFocusButton] {
         registrationStack.last?.buttons ?? []
     }
-
-#if canImport(VeltoKit)
-    var isBLEConnected: Bool { motionSDK?.isConnected ?? false }
-    var isBLEReceiving: Bool { motionSDK?.isReceiving ?? false }
-    var livePointerX: Double { motionSDK?.liveInput.posX ?? 0 }
-    var isTrikiConnectionActive: Bool { isEnabled && pollTask != nil }
-#else
-    var isBLEConnected: Bool { false }
-    var isBLEReceiving: Bool { false }
-    var livePointerX: Double { 0 }
-    var isTrikiConnectionActive: Bool { false }
-#endif
 
     private var acceptsTrikiInput: Bool {
         isEnabled && !isBlocked
@@ -122,16 +131,35 @@ final class TrikiNavigationCoordinator {
         refreshPolling()
     }
 
+    func startScanningForPairing() {
+        motion.configure(for: .menu)
+        motion.connect()
+    }
+
+    func connectToCachedDevice() {
+        motion.configure(for: .menu)
+        motion.connectLastDevice()
+    }
+
     func performCalibration() {
-#if canImport(VeltoKit)
-        guard let sdk = motionSDK else { return }
-        TrikiMotionCalibration.applyUserCalibration(on: sdk)
-#endif
+        motion.configure(for: .menu)
+        motion.calibrateNeutralPose()
+        lastGameInput = motion.snapshotInput()
+        previousPointerDirection = .center
+        livePointerX = lastGameInput.posX
+        debugSwingPhase = "—"
+        activityLog?.record(.system, title: "Kalibracja wykonana (VeltoKit)")
         markSessionCalibrated()
     }
 
     func skipCalibration() {
+        motion.discardStaleButtonInput()
+        activityLog?.record(.system, title: "Pominięto kalibrację")
         markSessionCalibrated()
+    }
+
+    func calibrateNeutralForSpeedometerDiagnostics() {
+        motion.calibrateNeutralPose()
     }
 
     private func markSessionCalibrated() {
@@ -157,6 +185,9 @@ final class TrikiNavigationCoordinator {
         if !enabled {
             sessionCalibrated = false
             showsCalibrationPrompt = false
+            logActivity(.system, title: "Triki wyłączone w aplikacji")
+        } else {
+            logActivity(.system, title: "Triki włączone w aplikacji")
         }
         refreshPolling()
     }
@@ -194,17 +225,17 @@ final class TrikiNavigationCoordinator {
     }
 
     private func startPollingIfNeeded() {
-#if canImport(VeltoKit)
         guard pollTask == nil else { return }
         connectionMessage = "Triki: szukam kontrolera…"
         showPairingOverlay = true
         connectedBannerShown = false
 
-        let sdk = motionSDK ?? MotionSDK()
-        TrikiMotionTuning.applyGentlePointerProfile(to: sdk)
-        sdk.connect()
-        motionSDK = sdk
-        reconnectAttemptAt = Date().timeIntervalSinceReferenceDate
+        motion.configure(for: .menu)
+        motion.connect()
+        previousPointerDirection = .center
+        previousShake = false
+        previousFlick = false
+        previousShot = false
         resetButtonPressState()
 
         pollTask = Task { @MainActor in
@@ -213,16 +244,14 @@ final class TrikiNavigationCoordinator {
                 let now = Date()
                 let delta = now.timeIntervalSince(previous)
                 previous = now
-                let nowRef = now.timeIntervalSinceReferenceDate
-                refreshConnectionState(now: nowRef)
+                refreshConnectionState()
                 pollMotionFrame(deltaTime: max(0.01, delta))
                 if acceptsTrikiInput {
-                    processPhysicalButton(now: nowRef)
+                    processPhysicalButton(now: now.timeIntervalSinceReferenceDate)
                 }
                 try? await Task.sleep(for: .milliseconds(16))
             }
         }
-#endif
     }
 
     private func stopPolling() {
@@ -235,66 +264,105 @@ final class TrikiNavigationCoordinator {
         connectedBannerShown = false
         showsCalibrationPrompt = false
         resetButtonPressState()
-#if canImport(VeltoKit)
-        motionSDK?.disconnect()
-        motionSDK = nil
-#endif
+        motion.disconnect()
     }
 
-#if canImport(VeltoKit)
     private func pollMotionFrame(deltaTime: TimeInterval) {
-        guard let sdk = motionSDK else { return }
-        let input = sdk.pollInput(deltaTime: deltaTime)
-        debugDeltaX = sdk.debug.relX
+        let input = motion.pollInput(deltaTime: deltaTime)
+        lastGameInput = input
+
+        debugDeltaX = input.deltaX
         debugTiltX = input.tiltX
         debugTiltY = input.tiltY
-        debugButtonHeld = BLEButtonDecoder.isPressed(sdk.lastButtonByte)
+        debugButtonHeld = BLEButtonDecoder.isPressed(motion.lastButtonByte)
         debugShake = input.shake
-        debugClick = input.primaryAction
+        debugClick = input.bleButtonClick
 
-        let previousDirection = resolvedDirection
-        resolvedDirection = TrikiDirectionResolver.resolve(posX: input.posX, previous: resolvedDirection)
-        debugPointerDirection = resolvedDirection.label
+        livePointerX = input.posX
+        debugPointerDirection = input.pointerDirection.polishLabel
+        debugRelY = input.deltaY
+        debugSensorSpeed = input.trikiVelocity
+        debugSensorMotion = input.intensity
+        debugSwingPosY = input.posY
+        debugSwingMotion = input.intensity
+        debugSwingGyro = input.sensors.gyroZ
 
-        if resolvedDirection == .left, previousDirection != .left {
-            emitMotionGesture(.rotateLeft)
-        } else if resolvedDirection == .right, previousDirection != .right {
-            emitMotionGesture(.rotateRight)
-        }
-        if debugShake, !previousShakeForGesture {
-            emitMotionGesture(.shake)
-        }
-        let now = Date().timeIntervalSinceReferenceDate
-        if abs(sdk.debug.relX) >= TrikiMotionTuning.diagnosticDeltaThreshold,
-           now - lastSlideGestureAt > 0.5 {
-            emitMotionGesture(.slide)
-            lastSlideGestureAt = now
-        }
-        previousShakeForGesture = debugShake
+        detectSDKGestures(input: input)
+        previousPointerDirection = input.pointerDirection
     }
 
-    private func emitMotionGesture(_ kind: TrikiInferredGestureKind) {
+    /// Impulsy z VeltoKit (`GameInput`) — bez własnego parsera BLE.
+    private func detectSDKGestures(input: GameInput) {
+        if input.shake, !previousShake {
+            emitMotionGesture(.shake, detail: "trikiVelocity \(String(format: "%.2f", input.trikiVelocity))")
+        }
+        previousShake = input.shake
+
+        if input.flick, !previousFlick {
+            debugSwingPhase = "swing"
+            emitMotionGesture(
+                .swordSwing,
+                detail: String(format: "flick · mot %.2f · v %.2f", input.intensity, input.trikiVelocity)
+            )
+        }
+        previousFlick = input.flick
+
+        if input.shotTriggered, !previousShot {
+            debugSwingPhase = "rzut"
+            emitMotionGesture(
+                .bowRelease,
+                detail: String(format: "power %.0f%% · posY %+.2f", input.throwPower * 100, input.posY)
+            )
+        }
+        previousShot = input.shotTriggered
+
+        if sessionCalibrated {
+            switch input.pointerDirection {
+            case .left where previousPointerDirection != .left:
+                emitMotionGesture(.rotateLeft, detail: String(format: "posX %+.2f", input.posX))
+            case .right where previousPointerDirection != .right:
+                emitMotionGesture(.rotateRight, detail: String(format: "posX %+.2f", input.posX))
+            case .up where previousPointerDirection != .up:
+                emitMotionGesture(.moveForward, detail: String(format: "posY %+.2f", input.posY))
+            case .down where previousPointerDirection != .down:
+                emitMotionGesture(.moveBackward, detail: String(format: "posY %+.2f", input.posY))
+            default:
+                break
+            }
+        }
+    }
+
+    private func emitMotionGesture(_ kind: TrikiInferredGestureKind, detail: String = "") {
+        if kind != .physicalButton {
+            let now = Date().timeIntervalSinceReferenceDate
+            guard now - lastMotionGestureAt >= Self.motionGestureCooldown else { return }
+            lastMotionGestureAt = now
+        }
         lastMotionGesture = kind
+        lastMotionGestureDetail = detail.isEmpty ? kind.rawValue : detail
         motionGestureRevision += 1
+        activityLog?.recordGesture(kind, detail: lastMotionGestureDetail)
     }
-#endif
 
-#if canImport(VeltoKit)
-    private func refreshConnectionState(now: TimeInterval) {
-        let connected = motionSDK?.isConnected ?? false
-        let receiving = motionSDK?.isReceiving ?? false
+    private func logActivity(
+        _ category: TrikiLogCategory,
+        title: String,
+        detail: String = ""
+    ) {
+        activityLog?.record(category, title: title, detail: detail)
+    }
 
-        if !connected, now - reconnectAttemptAt > 2.8 {
-            motionSDK?.connect()
-            reconnectAttemptAt = now
-        }
+    private func refreshConnectionState() {
+        let connected = motion.isConnected
+        let receiving = motion.isReceiving
 
         if connected, receiving {
-            connectionMessage = "Triki: połączono"
+            connectionMessage = "Triki: połączono · \(trikiBLEModeLabel)"
+            if let hint = motion.trikiIdleStatusMessage, !hint.isEmpty {
+                connectionMessage += " · \(hint)"
+            }
             if !sessionCalibrated {
-                if pairingUIActive {
-                    // Parowanie w arkuszu ustawień — kalibracja w tym arkuszu.
-                } else {
+                if !pairingUIActive {
                     showsCalibrationPrompt = true
                     showPairingOverlay = true
                     connectedBannerShown = false
@@ -303,11 +371,7 @@ final class TrikiNavigationCoordinator {
                 }
             } else if !connectedBannerShown {
                 connectedBannerShown = true
-                overlayHideTask?.cancel()
-                overlayHideTask = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(900))
-                    showPairingOverlay = false
-                }
+                scheduleHidePairingOverlay()
             }
         } else if connected {
             connectionMessage = "Triki: czekam na dane…"
@@ -315,11 +379,7 @@ final class TrikiNavigationCoordinator {
                 showsCalibrationPrompt = false
             } else if !connectedBannerShown {
                 connectedBannerShown = true
-                overlayHideTask?.cancel()
-                overlayHideTask = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(900))
-                    showPairingOverlay = false
-                }
+                scheduleHidePairingOverlay()
             }
         } else {
             connectionMessage = "Triki: szukam kontrolera BLE…"
@@ -331,9 +391,16 @@ final class TrikiNavigationCoordinator {
         }
     }
 
+    private func scheduleHidePairingOverlay() {
+        overlayHideTask?.cancel()
+        overlayHideTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            showPairingOverlay = false
+        }
+    }
+
     private func processPhysicalButton(now: TimeInterval) {
-        guard let sdk = motionSDK else { return }
-        let buttonHeld = BLEButtonDecoder.isPressed(sdk.lastButtonByte)
+        let buttonHeld = BLEButtonDecoder.isPressed(motion.lastButtonByte)
 
         if buttonHeld, !trikiButtonHeldLastFrame {
             trikiButtonPressBeganAt = now
@@ -344,12 +411,23 @@ final class TrikiNavigationCoordinator {
             holdChargeProgress = min(1, elapsed / longPressHoldDuration)
             if elapsed >= longPressHoldDuration, !trikiLongPressActivated {
                 trikiLongPressActivated = true
+                let label = activeButtons.indices.contains(selectionIndex)
+                    ? activeButtons[selectionIndex].title
+                    : "—"
+                logActivity(.button, title: "Długie przytrzymanie", detail: "aktywacja: \(label)")
+                emitMotionGesture(.physicalButton, detail: "długie · \(label)")
                 activateCurrentSelection()
             }
         } else if !buttonHeld, trikiButtonHeldLastFrame {
             if let beganAt = trikiButtonPressBeganAt, !trikiLongPressActivated {
                 let elapsed = now - beganAt
                 if elapsed < Self.shortClickMaxDuration {
+                    logActivity(
+                        .button,
+                        title: "Krótki klik",
+                        detail: String(format: "czas %.0f ms", elapsed * 1000)
+                    )
+                    emitMotionGesture(.physicalButton, detail: "krótki klik")
                     cycleSelection()
                 }
             }
@@ -362,7 +440,6 @@ final class TrikiNavigationCoordinator {
 
         trikiButtonHeldLastFrame = buttonHeld
     }
-#endif
 
     func cycleSelectionForward() {
         let buttons = activeButtons
@@ -372,6 +449,11 @@ final class TrikiNavigationCoordinator {
         }
         selectionIndex = (selectionIndex + 1) % buttons.count
         statusMessage = "Wybrano: \(buttons[selectionIndex].title)"
+        logActivity(
+            .navigation,
+            title: "Następna opcja",
+            detail: buttons[selectionIndex].title
+        )
     }
 
     func cycleSelectionBackward() {
@@ -382,6 +464,11 @@ final class TrikiNavigationCoordinator {
         }
         selectionIndex = (selectionIndex - 1 + buttons.count) % buttons.count
         statusMessage = "Wybrano: \(buttons[selectionIndex].title)"
+        logActivity(
+            .navigation,
+            title: "Poprzednia opcja",
+            detail: buttons[selectionIndex].title
+        )
     }
 
     func activateHighlightedSelection() {
@@ -398,6 +485,7 @@ final class TrikiNavigationCoordinator {
         let index = min(max(0, selectionIndex), buttons.count - 1)
         registrationStack.last?.onActivate(index)
         statusMessage = "Wciśnięto: \(buttons[index].title)"
+        logActivity(.navigation, title: "Aktywacja opcji", detail: buttons[index].title)
     }
 
     private func resetButtonPressState() {

@@ -82,6 +82,8 @@ struct PlayerRuntimeStats: Codable, Hashable {
             break
         case .specialCard:
             break
+        case .arenaPvP:
+            break
         }
     }
 }
@@ -156,39 +158,6 @@ struct PlayerStatsRevealSection: View {
     var trikiHoldChargeProgress: Double = 0
     @Binding var isScreenPresented: Bool
 
-    private var statDefinitions: [PlayerStatDefinition] {
-        [
-            PlayerStatDefinition(
-                id: "finances",
-                label: "Finanse",
-                icon: "dollarsign.circle.fill",
-                value: stats.finances,
-                color: .yellow
-            ),
-            PlayerStatDefinition(
-                id: "health",
-                label: "Zdrowie",
-                icon: "heart.fill",
-                value: stats.health,
-                color: .green
-            ),
-            PlayerStatDefinition(
-                id: "strength",
-                label: "Siła",
-                icon: "bolt.fill",
-                value: stats.strength,
-                color: .red
-            ),
-            PlayerStatDefinition(
-                id: "abilities",
-                label: "Zdolności",
-                icon: "sparkles",
-                value: stats.abilities,
-                color: .blue
-            ),
-        ]
-    }
-
     var body: some View {
         Button {
             settings.playStatsRevealSound()
@@ -230,7 +199,6 @@ struct PlayerStatsFullScreenView: View {
             PlayerStatDefinition(id: "health", label: "Zdrowie", icon: "heart.fill", value: stats.health, color: .green),
             PlayerStatDefinition(id: "strength", label: "Siła", icon: "bolt.fill", value: stats.strength, color: .red),
             PlayerStatDefinition(id: "xp", label: "Doświadczenie (XP)", icon: "star.circle.fill", value: experiencePoints, color: .purple),
-            PlayerStatDefinition(id: "abilities", label: "Zdolności", icon: "sparkles", value: stats.abilities, color: .blue),
         ]
     }
 

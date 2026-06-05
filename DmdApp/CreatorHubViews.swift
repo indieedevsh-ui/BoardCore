@@ -417,6 +417,24 @@ struct CreatorAddedListView: View {
             Text("ID \(item.numericId) · koszt \(item.cost)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let statLine = itemStatSummary(item) {
+                Text(statLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func itemStatSummary(_ item: CreatedItem) -> String? {
+        switch item.resolvedItemKind {
+        case .weapon:
+            return "Siła: +\(item.stats.weaponStrengthBonus)"
+        case .armor:
+            return "Zdrowie: +\(item.stats.armorHealthBonus)"
+        case .brush:
+            return "Szansa na drop: \(item.stats.brushArtifactLuckPercent)%"
+        default:
+            return nil
         }
     }
 

@@ -138,7 +138,7 @@ struct CreatorStatsEditor: View {
     @Binding var stats: CreatorStats
     var showRandomize: Bool = true
     var accentColor: Color
-    /// Gdy `.weapon`, suwak siły ustawia bonus +10…+80.
+    /// Gdy ustawiony, edytor pokazuje tylko statystykę właściwą dla typu przedmiotu.
     var itemKind: CreatorItemKind?
 
     var body: some View {
@@ -155,24 +155,37 @@ struct CreatorStatsEditor: View {
                     .buttonStyle(.appSecondary)
                 }
             }
-            statSlider(
-                itemKind == .weapon ? "Bonus siły (obrażenia)" : "Obrażenia / Siła",
-                value: $stats.strength,
-                range: itemKind == .weapon
-                    ? Double(CreatorStats.weaponStrengthRange.lowerBound)...Double(CreatorStats.weaponStrengthRange.upperBound)
-                    : 0...100,
-                showsPlus: itemKind == .weapon
-            )
-            statSlider(
-                itemKind == .armor ? "Bonus zdrowia" : "Zdrowie",
-                value: $stats.health,
-                range: itemKind == .armor
-                    ? Double(CreatorStats.armorHealthRange.lowerBound)...Double(CreatorStats.armorHealthRange.upperBound)
-                    : 0...100,
-                showsPlus: itemKind == .armor
-            )
-            statSlider("Mana", value: $stats.mana)
-            statSlider("Finanse", value: $stats.finances)
+
+            switch itemKind {
+            case .weapon:
+                statSlider(
+                    "Siła",
+                    value: $stats.strength,
+                    range: Double(CreatorStats.weaponStrengthRange.lowerBound)...Double(CreatorStats.weaponStrengthRange.upperBound),
+                    showsPlus: true
+                )
+            case .armor:
+                statSlider(
+                    "Zdrowie",
+                    value: $stats.health,
+                    range: Double(CreatorStats.armorHealthRange.lowerBound)...Double(CreatorStats.armorHealthRange.upperBound),
+                    showsPlus: true
+                )
+            case .brush:
+                statSlider(
+                    "Szansa na lepszy drop (%)",
+                    value: $stats.mana,
+                    range: Double(CreatorStats.brushArtifactLuckRange.lowerBound)...Double(CreatorStats.brushArtifactLuckRange.upperBound),
+                    showsPercent: true
+                )
+            case nil:
+                statSlider("Obrażenia / Siła", value: $stats.strength)
+                statSlider("Zdrowie", value: $stats.health)
+                statSlider("Mana", value: $stats.mana)
+                statSlider("Finanse", value: $stats.finances)
+            default:
+                EmptyView()
+            }
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -186,7 +199,8 @@ struct CreatorStatsEditor: View {
         _ title: String,
         value: Binding<Int>,
         range: ClosedRange<Double> = 0...100,
-        showsPlus: Bool = false
+        showsPlus: Bool = false,
+        showsPercent: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -194,6 +208,9 @@ struct CreatorStatsEditor: View {
                 Spacer()
                 if showsPlus {
                     Text("+\(value.wrappedValue)")
+                        .monospacedDigit()
+                } else if showsPercent {
+                    Text("\(value.wrappedValue)%")
                         .monospacedDigit()
                 } else {
                     Text("\(value.wrappedValue)")
@@ -410,11 +427,21 @@ struct ItemCreatorView: View {
 
                 CreatorStatsEditor(stats: $stats, accentColor: theme, itemKind: itemKind)
                     .onChange(of: itemKind) { _, kind in
-                        if kind == .weapon, !CreatorStats.weaponStrengthRange.contains(stats.strength) {
-                            stats.strength = 40
-                        }
-                        if kind == .armor, !CreatorStats.armorHealthRange.contains(stats.health) {
-                            stats.health = 40
+                        switch kind {
+                        case .weapon:
+                            if !CreatorStats.weaponStrengthRange.contains(stats.strength) {
+                                stats.strength = 40
+                            }
+                        case .armor:
+                            if !CreatorStats.armorHealthRange.contains(stats.health) {
+                                stats.health = 40
+                            }
+                        case .brush:
+                            if !CreatorStats.brushArtifactLuckRange.contains(stats.mana) {
+                                stats.mana = 10
+                            }
+                        default:
+                            break
                         }
                     }
 
@@ -463,7 +490,7 @@ struct ItemCreatorView: View {
                 numericId: trimmedID,
                 name: trimmedName,
                 cost: cost,
-                stats: stats,
+                stats: CreatorStats.normalizedForItemKind(itemKind, stats: stats),
                 itemKind: itemKind,
                 imageFileName: nil,
                 buildPrompt: CreatorBuildPrompts.item(isBrush: itemKind == .brush)

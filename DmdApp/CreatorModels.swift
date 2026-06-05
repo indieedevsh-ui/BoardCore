@@ -63,7 +63,7 @@ enum CreatorItemKind: String, Codable, CaseIterable, Identifiable {
     var artifactHint: String? {
         switch self {
         case .brush:
-            "Im wyższy koszt pędzla, tym lepsze szanse na łup z artefaktów (do 70% szczęśliwego losu)."
+            "Pędzel zwiększa szansę na lepszy drop z artefaktów — ustaw wartość w % (5–25)."
         default:
             "Można założyć jedną broń i jeden pancerz (w tym hełmy i tarcze liczą się jako pancerz)."
         }
@@ -105,31 +105,45 @@ enum CreatorItemKind: String, Codable, CaseIterable, Identifiable {
 struct CreatorStats: Codable, Hashable {
     static let weaponStrengthRange = 10...80
     static let armorHealthRange = 10...80
+    static let brushArtifactLuckRange = 5...25
 
     var finances: Int = 50
     var health: Int = 70
     var strength: Int = 50
+    /// Dla pędzla: szansa (%) na lepszy drop z artefaktów.
     var mana: Int = 50
 
     static func random(itemKind: CreatorItemKind? = nil) -> CreatorStats {
-        let strengthValue: Int
-        let healthValue: Int
-        if itemKind == .weapon {
-            strengthValue = Int.random(in: weaponStrengthRange)
-            healthValue = Int.random(in: 35...90)
-        } else if itemKind == .armor {
-            strengthValue = Int.random(in: 35...90)
-            healthValue = Int.random(in: armorHealthRange)
-        } else {
-            strengthValue = Int.random(in: 35...90)
-            healthValue = Int.random(in: 35...90)
+        switch itemKind {
+        case .weapon:
+            return CreatorStats(
+                finances: 50,
+                health: 50,
+                strength: Int.random(in: weaponStrengthRange),
+                mana: 50
+            )
+        case .armor:
+            return CreatorStats(
+                finances: 50,
+                health: Int.random(in: armorHealthRange),
+                strength: 50,
+                mana: 50
+            )
+        case .brush:
+            return CreatorStats(
+                finances: 50,
+                health: 50,
+                strength: 50,
+                mana: Int.random(in: brushArtifactLuckRange)
+            )
+        default:
+            return CreatorStats(
+                finances: Int.random(in: 35...90),
+                health: Int.random(in: 35...90),
+                strength: Int.random(in: 35...90),
+                mana: Int.random(in: 35...90)
+            )
         }
-        return CreatorStats(
-            finances: Int.random(in: 35...90),
-            health: healthValue,
-            strength: strengthValue,
-            mana: Int.random(in: 35...90)
-        )
     }
 
     /// Statystyki skorelowane z ceną — droższa broń/pancerz daje wyższy bonus.
@@ -153,6 +167,13 @@ struct CreatorStats: Codable, Hashable {
                 health: valueForTier(tier, in: armorHealthRange),
                 strength: 50,
                 mana: 50
+            )
+        case .brush:
+            return CreatorStats(
+                finances: 50,
+                health: 50,
+                strength: 50,
+                mana: valueForTier(tier, in: brushArtifactLuckRange)
             )
         default:
             return CreatorStats(
@@ -204,28 +225,86 @@ struct CreatorStats: Codable, Hashable {
         try container.encode(mana, forKey: .mana)
     }
 
-    /// Bonus ekwipunku w sklepie: broń → siła, pancerz → zdrowie.
-    func shopEquipBonus(for itemKind: CreatorItemKind) -> (icon: String, label: String, bonus: Int)? {
+    /// Bonus ekwipunku w sklepie: broń → siła, pancerz → zdrowie, pędzel → szansa artefaktów.
+    func shopEquipBonus(for itemKind: CreatorItemKind) -> (icon: String, label: String, bonus: Int, showsPercent: Bool)? {
         switch itemKind.equipmentSlotKind {
         case .weapon:
-            ("bolt.fill", "Siła", weaponStrengthBonus)
+            ("bolt.fill", "Siła", weaponStrengthBonus, false)
         case .armor:
-            ("heart.fill", "Zdrowie", armorHealthBonus)
+            ("heart.fill", "Zdrowie", armorHealthBonus, false)
+        case .brush:
+            ("sparkles", "szansy artefaktów", brushArtifactLuckPercent, true)
         default:
             nil
         }
     }
 
-    /// Wiersze statystyk przedmiotu do podglądu w sklepie (neutral = 50).
-    func itemShopStatRows(for itemKind: CreatorItemKind) -> [(label: String, icon: String, value: Int, bonus: Int)] {
-        let damageBonus = itemKind == .weapon ? weaponStrengthBonus : strengthBonus
-        let healthRowBonus = itemKind == .armor ? armorHealthBonus : health - 50
-        return [
-            ("Obrażenia", "bolt.fill", strength, damageBonus),
-            ("Zdrowie", "heart.fill", health, healthRowBonus),
-            ("Mana", "sparkles", mana, mana - 50),
-            ("Finanse", "dollarsign.circle.fill", finances, finances - 50),
-        ]
+    /// Wiersze statystyk przedmiotu — jedna statystyka na typ (broń / pancerz / pędzel).
+    func itemShopStatRows(for itemKind: CreatorItemKind) -> [(label: String, icon: String, value: Int, bonus: Int, showsPercent: Bool)] {
+        switch itemKind.equipmentSlotKind {
+        case .weapon:
+            return [("Siła", "bolt.fill", strength, weaponStrengthBonus, false)]
+        case .armor:
+            return [("Zdrowie", "heart.fill", health, armorHealthBonus, false)]
+        case .brush:
+            let luck = brushArtifactLuckPercent
+            return [("Szansa na lepszy drop", "sparkles", luck, luck, true)]
+        default:
+            return []
+        }
+    }
+
+    /// Zeruje nieużywane pola — każdy typ przedmiotu ma tylko jedną statystykę.
+    static func normalizedForItemKind(_ kind: CreatorItemKind, stats: CreatorStats) -> CreatorStats {
+        switch kind {
+        case .weapon:
+            return CreatorStats(
+                finances: 50,
+                health: 50,
+                strength: stats.strength,
+                mana: 50
+            )
+        case .armor:
+            return CreatorStats(
+                finances: 50,
+                health: stats.health,
+                strength: 50,
+                mana: 50
+            )
+        case .brush:
+            return CreatorStats(
+                finances: 50,
+                health: 50,
+                strength: 50,
+                mana: stats.mana
+            )
+        default:
+            return stats
+        }
+    }
+
+    /// Szansa (%) na lepszy drop z artefaktów — przechowywana w polu `mana` pędzla.
+    var brushArtifactLuckPercent: Int {
+        if Self.brushArtifactLuckRange.contains(mana) {
+            return mana
+        }
+        return Self.brushArtifactLuckRange.lowerBound
+    }
+
+    /// Szansa pędzla — nowe zapisy używają `mana`; starsze wpisy liczone z ceny.
+    static func brushArtifactLuckPercent(for item: CreatedItem) -> Int {
+        if brushArtifactLuckRange.contains(item.stats.mana) {
+            return item.stats.mana
+        }
+        return legacyBrushLuckPercent(forCost: item.cost)
+    }
+
+    /// Wsteczna kompatybilność: koszt 1–99 → +5%, 100–149 → +10%, 150+ → +15%.
+    static func legacyBrushLuckPercent(forCost cost: Int) -> Int {
+        if cost >= 150 { return 15 }
+        if cost >= 100 { return 10 }
+        if cost >= 1 { return 5 }
+        return brushArtifactLuckRange.lowerBound
     }
 
     var healthBonus: Int { max(0, health - 50) }

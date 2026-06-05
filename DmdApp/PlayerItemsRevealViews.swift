@@ -373,7 +373,7 @@ private struct PlayerItemRevealRow: View {
                         Text(row.label)
                             .font(.subheadline)
                         Spacer()
-                        Text("\(row.value)")
+                        Text(row.showsPercent ? "\(row.value)%" : "+\(row.value)")
                             .font(.subheadline.bold())
                             .monospacedDigit()
                     }

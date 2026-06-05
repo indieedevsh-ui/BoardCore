@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4C4D2F9B2FCB0C100023AB3B /* LlamaSwift in Frameworks */ = {isa = PBXBuildFile; productRef = LLAMA2PROD00000001 /* LlamaSwift */; };
-		4C4D2F9C2FCB0C200023AB3C /* VeltoKit in Frameworks */ = {isa = PBXBuildFile; productRef = VELTOKIT2PROD00000001 /* VeltoKit */; };
+		4C4D2F9D2FCB0C200023AB3D /* VeltoKit in Frameworks */ = {isa = PBXBuildFile; productRef = VELTO2PROD00000001 /* VeltoKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,7 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C4D2F9B2FCB0C100023AB3B /* LlamaSwift in Frameworks */,
-				4C4D2F9C2FCB0C200023AB3C /* VeltoKit in Frameworks */,
+				4C4D2F9D2FCB0C200023AB3D /* VeltoKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,7 +133,7 @@
 			name = DmdApp;
 			packageProductDependencies = (
 				LLAMA2PROD00000001 /* LlamaSwift */,
-				VELTOKIT2PROD00000001 /* VeltoKit */,
+				VELTO2PROD00000001 /* VeltoKit */,
 			);
 			productName = DmdApp;
 			productReference = 4C4D2ECB2FCAFE190023AB3B /* DmdApp.app */;
@@ -219,7 +219,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				LLAMA2PKG00000001 /* XCRemoteSwiftPackageReference "llama" */,
-				VELTOKIT2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */,
+				VELTO2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4C4D2ECC2FCAFE190023AB3B /* Products */;
@@ -618,12 +618,12 @@
 				version = 2.8665.0;
 			};
 		};
-		VELTOKIT2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */ = {
+		VELTO2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/koderhack/veltokit";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = cfc407add10b93d57b04fb93ddfb5777be650c78;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -634,9 +634,9 @@
 			package = LLAMA2PKG00000001 /* XCRemoteSwiftPackageReference "llama" */;
 			productName = LlamaSwift;
 		};
-		VELTOKIT2PROD00000001 /* VeltoKit */ = {
+		VELTO2PROD00000001 /* VeltoKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = VELTOKIT2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */;
+			package = VELTO2PKG00000001 /* XCRemoteSwiftPackageReference "veltokit" */;
 			productName = VeltoKit;
 		};
 /* End XCSwiftPackageProductDependency section */

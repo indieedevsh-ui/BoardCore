@@ -22,6 +22,7 @@ struct DmdAppApp: App {
     @State private var creatorStore: CreatorStore
     @State private var playerSlotStore: PlayerSlotStore
     @State private var trikiDiagnostics = TrikiControllerDiagnosticsStore()
+    @State private var trikiActivityLog = TrikiControllerLogStore()
     @State private var trikiNavigation = TrikiNavigationCoordinator()
 
     init() {
@@ -86,7 +87,12 @@ struct DmdAppApp: App {
                 .environment(creatorStore)
                 .environment(playerSlotStore)
                 .environment(trikiDiagnostics)
+                .environment(trikiActivityLog)
                 .environment(trikiNavigation)
+                .onAppear {
+                    trikiNavigation.activityLog = trikiActivityLog
+                    trikiDiagnostics.activityLog = trikiActivityLog
+                }
                 .preferredColorScheme(.dark)
         }
         .modelContainer(sharedModelContainer)

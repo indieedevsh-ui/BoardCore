@@ -72,6 +72,15 @@ enum BossDifficulty: String, CaseIterable, Identifiable {
         case .hard: 0.85
         }
     }
+
+    /// Łączna pula monet za zwycięstwo (dzielona między uczestników walki).
+    var victoryCoinPool: Int {
+        switch self {
+        case .easy: 60
+        case .medium: 120
+        case .hard: 180
+        }
+    }
 }
 
 struct BossDefinition: Identifiable, Equatable {

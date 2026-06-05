@@ -16,14 +16,36 @@ struct BossFightVictoryRewardStep: Identifiable, Equatable {
     let financesBefore: Int
     let rewardAmount: Int
     let rewardPercentLabel: String
+    let xpBefore: Int
+    let rewardXP: Int
+    var headline: String?
+    var isPenalty: Bool = false
 }
 
 struct BossFightVictoryPresentation: Equatable {
     let steps: [BossFightVictoryRewardStep]
-    let outcome: BossFightCombatOutcome
+    let bossOutcome: BossFightCombatOutcome?
+    var headline: String = "Boss został pokonany"
+
+    init(steps: [BossFightVictoryRewardStep], outcome: BossFightCombatOutcome) {
+        self.steps = steps
+        self.bossOutcome = outcome
+        self.headline = "Boss został pokonany"
+    }
+
+    init(arenaSteps: [BossFightVictoryRewardStep], headline: String = "Arena PvP") {
+        self.steps = arenaSteps
+        self.bossOutcome = nil
+        self.headline = headline
+    }
 
     var hasSupporters: Bool {
-        steps.count > 1
+        guard bossOutcome != nil else { return false }
+        return steps.count > 1
+    }
+
+    var showsContinueAfterSequence: Bool {
+        hasSupporters
     }
 }
 
@@ -40,11 +62,18 @@ struct BossFightVictoryRewardOverlay: View {
     @State private var contentOffset: CGFloat = 0
     @State private var contentScale: CGFloat = 1
     @State private var currentStepIndex = 0
+    @State private var rewardPhase: RewardPhase = .finances
     @State private var displayedFinances: Int = 0
+    @State private var displayedXP: Int = 0
     @State private var showBonus = false
     @State private var bonusOpacity: Double = 0
     @State private var showContinueButton = false
     @State private var sequenceTask: Task<Void, Never>?
+
+    private enum RewardPhase {
+        case finances
+        case experience
+    }
 
     private var currentStep: BossFightVictoryRewardStep? {
         presentation.steps[safe: currentStepIndex]
@@ -77,7 +106,7 @@ struct BossFightVictoryRewardOverlay: View {
 
                 if let step = currentStep {
                     VStack(spacing: 22) {
-                        Text("Boss został pokonany")
+                        Text(step.headline ?? presentation.headline)
                             .font(.largeTitle.bold())
                             .multilineTextAlignment(.center)
 
@@ -100,7 +129,15 @@ struct BossFightVictoryRewardOverlay: View {
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
 
-                        financesBlock(for: step)
+                        Group {
+                            switch rewardPhase {
+                            case .finances:
+                                financesBlock(for: step)
+                            case .experience:
+                                xpBlock(for: step)
+                            }
+                        }
+                        .id("\(step.id)-\(rewardPhase == .finances ? "coins" : "xp")")
                     }
                     .padding(.horizontal, 28)
                     .opacity(contentOpacity)
@@ -206,17 +243,53 @@ struct BossFightVictoryRewardOverlay: View {
                     .foregroundStyle(.secondary)
             }
 
-            if showBonus {
+            if showBonus, step.rewardAmount > 0 {
                 VStack(spacing: 4) {
-                    Text("+\(step.rewardAmount)")
+                    Text("\(step.isPenalty ? "−" : "+")\(step.rewardAmount)")
                         .font(.title2.bold())
-                        .foregroundStyle(.green)
-                    Text("+\(step.rewardPercentLabel) z nagrody")
+                        .foregroundStyle(step.isPenalty ? .red : .green)
+                    Text("\(step.isPenalty ? "−" : "+")\(step.rewardPercentLabel)")
                         .font(.caption.bold())
-                        .foregroundStyle(.green.opacity(0.9))
+                        .foregroundStyle((step.isPenalty ? Color.red : Color.green).opacity(0.9))
                 }
                 .opacity(bonusOpacity)
                 .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func xpBlock(for step: BossFightVictoryRewardStep) -> some View {
+        VStack(spacing: 10) {
+            Text("Doświadczenie")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(displayedXP)")
+                    .font(.system(size: 42, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(.white)
+
+                Text("XP")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if showBonus, step.rewardXP > 0 {
+                Text("\(step.isPenalty ? "−" : "+")\(step.rewardXP) XP")
+                    .font(.title2.bold())
+                    .foregroundStyle(step.isPenalty ? .red : .purple)
+                    .opacity(bonusOpacity)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .padding(.horizontal, 24)
@@ -260,7 +333,7 @@ struct BossFightVictoryRewardOverlay: View {
 
             guard !Task.isCancelled else { return }
 
-            if presentation.hasSupporters {
+            if presentation.showsContinueAfterSequence {
                 withAnimation(.spring(response: 0.48, dampingFraction: 0.84)) {
                     showContinueButton = true
                 }
@@ -273,7 +346,9 @@ struct BossFightVictoryRewardOverlay: View {
     }
 
     private func resetStepAnimationState(for step: BossFightVictoryRewardStep) {
+        rewardPhase = .finances
         displayedFinances = step.financesBefore
+        displayedXP = step.xpBefore
         showBonus = false
         bonusOpacity = 0
     }
@@ -281,7 +356,9 @@ struct BossFightVictoryRewardOverlay: View {
     private func animateCurrentStep() async {
         guard let step = presentation.steps[safe: currentStepIndex] else { return }
 
+        rewardPhase = .finances
         displayedFinances = step.financesBefore
+        displayedXP = step.xpBefore
         showBonus = false
         bonusOpacity = 0
 
@@ -305,12 +382,49 @@ struct BossFightVictoryRewardOverlay: View {
         guard !Task.isCancelled else { return }
 
         showBonus = false
+        let financeDelta = step.isPenalty ? -step.rewardAmount : step.rewardAmount
         withAnimation(.spring(response: 0.68, dampingFraction: 0.86)) {
-            displayedFinances = step.financesBefore + step.rewardAmount
+            displayedFinances = max(0, step.financesBefore + financeDelta)
         }
         HapticManager.playStatReveal(intensity: settings.hapticIntensity * 0.75)
 
         try? await Task.sleep(for: .milliseconds(1100))
+        guard !Task.isCancelled else { return }
+
+        if step.rewardXP > 0 {
+            rewardPhase = .experience
+            displayedXP = step.xpBefore
+            showBonus = false
+            bonusOpacity = 0
+
+            try? await Task.sleep(for: .milliseconds(650))
+            guard !Task.isCancelled else { return }
+
+            showBonus = true
+            withAnimation(.spring(response: 0.52, dampingFraction: 0.78)) {
+                bonusOpacity = 1
+            }
+            HapticManager.playStatReveal(intensity: settings.hapticIntensity * 0.65)
+            settings.playTapSound()
+
+            try? await Task.sleep(for: .milliseconds(1650))
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.easeOut(duration: 0.42)) {
+                bonusOpacity = 0
+            }
+            try? await Task.sleep(for: .milliseconds(420))
+            guard !Task.isCancelled else { return }
+
+            showBonus = false
+            let xpDelta = step.isPenalty ? -step.rewardXP : step.rewardXP
+            withAnimation(.spring(response: 0.68, dampingFraction: 0.86)) {
+                displayedXP = max(0, step.xpBefore + xpDelta)
+            }
+            HapticManager.playStatReveal(intensity: settings.hapticIntensity * 0.75)
+
+            try? await Task.sleep(for: .milliseconds(1100))
+        }
     }
 }
 

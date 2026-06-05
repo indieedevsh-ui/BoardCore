@@ -4,9 +4,6 @@
 //
 
 import SwiftUI
-#if canImport(VeltoKit)
-import VeltoKit
-#endif
 
 private enum GameLobbyMode {
     case chooseStart
@@ -404,13 +401,16 @@ struct GameInProgressView: View {
     @State private var campaignStoryFinished = false
     @State private var inGameScreen: InGameScreen = .gameplay
     @State private var showBossFightAR = false
-    @State private var sessionAbilityPool = GameplaySessionAbilityPoolState(abilities: [], availability: [:])
+    @State private var showArenaPvPAR = false
+    @State private var isArenaPvPActive = false
+    @State private var sessionAbilityPool = GameplaySessionAbilityPoolState(abilities: [])
     @State private var playerBoardPositions: [UUID: Int] = [:]
     @State private var activeTurnDamageEffects: [ActiveTurnDamageEffect] = []
     @State private var activeTemporaryBoosts: [UUID: [ActiveTemporaryBoost]] = [:]
     @State private var pendingAbilityUse: PendingSessionAbilityUse?
     @State private var showPlayerItemsOverlay = false
     @State private var showPlayerStatsOverlay = false
+    @State private var showSessionAbilitiesOverlay = false
     @State private var specialCardDrawRevealed = false
     @State private var artifactDrawRevealed = false
     @State private var playerPowerPathProgress: [UUID: PlayerPowerPathProgress] = [:]
@@ -457,17 +457,10 @@ struct GameInProgressView: View {
         }
     }
 
-    private enum TrikiRuntimeGesture {
-        case slide
-        case rotateLeft
-        case rotateRight
-        case click
-        case shake
-    }
-
     private enum TrikiSelectableButton: Hashable {
         case showStats
         case showItems
+        case showAbilities
         case skipTurn
         case saveGame
         case ability(UUID)
@@ -488,6 +481,7 @@ struct GameInProgressView: View {
         case equipmentToggle(UUID)
         case equipmentExit
         case statsExit
+        case abilitiesExit
         case finishCampaign
         case switchToGameplayTab
     }
@@ -496,6 +490,7 @@ struct GameInProgressView: View {
         switch button {
         case .showStats: return "Pokaż Statystyki"
         case .showItems: return "Pokaż przedmioty"
+        case .showAbilities: return "Zdolności"
         case .skipTurn: return "Pomiń turę"
         case .saveGame: return "Zapisz grę"
         case .ability: return "Użyj zdolności"
@@ -529,6 +524,8 @@ struct GameInProgressView: View {
         case .equipmentExit:
             return "Wyjdź"
         case .statsExit:
+            return "Wyjdź"
+        case .abilitiesExit:
             return "Wyjdź"
         case .finishCampaign:
             return "Zakończ"
@@ -898,7 +895,7 @@ struct GameInProgressView: View {
     }
 
     private var trikiSelectableButtons: [TrikiSelectableButton] {
-        if showBossFightAR || pendingAbilityUse != nil {
+        if showBossFightAR || showArenaPvPAR || pendingAbilityUse != nil {
             return []
         }
         if isStartFieldOverlayVisible {
@@ -909,6 +906,9 @@ struct GameInProgressView: View {
         }
         if showPlayerStatsOverlay {
             return [.statsExit]
+        }
+        if showSessionAbilitiesOverlay {
+            return [.abilitiesExit]
         }
         if showPlayerItemsOverlay {
             return equipmentTrikiButtons
@@ -969,6 +969,7 @@ struct GameInProgressView: View {
         switch button {
         case .showStats: return "showStats"
         case .showItems: return "showItems"
+        case .showAbilities: return "showAbilities"
         case .skipTurn: return "skipTurn"
         case .saveGame: return "saveGame"
         case .ability(let id): return "ability-\(id.uuidString)"
@@ -989,6 +990,7 @@ struct GameInProgressView: View {
         case .equipmentToggle(let id): return "equip-\(id.uuidString)"
         case .equipmentExit: return "equipExit"
         case .statsExit: return "statsExit"
+        case .abilitiesExit: return "abilitiesExit"
         case .finishCampaign: return "finishCampaign"
         case .switchToGameplayTab: return "switchGameplay"
         }
@@ -1010,6 +1012,7 @@ struct GameInProgressView: View {
         [
             String(showPlayerItemsOverlay),
             String(showPlayerStatsOverlay),
+            String(showSessionAbilitiesOverlay),
             String(isPowerPathOverlayVisible),
             powerPathTrikiCatalog.map(\.id).joined(separator: ","),
             String(bossVictoryPresentation != nil),
@@ -1066,18 +1069,13 @@ struct GameInProgressView: View {
     }
 
     private var defaultTrikiGameplayButtons: [TrikiSelectableButton] {
-        var buttons: [TrikiSelectableButton] = [.showStats, .showItems]
+        var buttons: [TrikiSelectableButton] = [.showStats, .showItems, .showAbilities]
         if activeQueueBlockRounds == 0 {
             buttons.append(.skipTurn)
         }
         buttons.append(.saveGame)
         if isBossFightActive {
             buttons.append(contentsOf: [.bossEnterAR, .bossEndFight])
-        }
-        if let activePlayer {
-            for ability in grantedSessionAbilities(for: activePlayer.id) {
-                buttons.append(.ability(ability.id))
-            }
         }
         return buttons
     }
@@ -1291,7 +1289,9 @@ struct GameInProgressView: View {
     private var shouldAnimateFinancesChangesAutomatically: Bool {
         !isStartFieldOverlayVisible
             && !showBossFightAR
+            && !showArenaPvPAR
             && !isBossFightActive
+            && !isArenaPvPActive
             && bossVictoryPresentation == nil
             && !isArtifactDrawVisible
             && !isSpecialCardDrawVisible
@@ -1620,6 +1620,9 @@ struct GameInProgressView: View {
                     )
                 }
             }
+            .fullScreenCover(isPresented: $showSessionAbilitiesOverlay) {
+                sessionAbilitiesOverlayContent
+            }
             .fullScreenCover(isPresented: $showPlayerItemsOverlay) {
                 if let activePlayer {
                     PlayerItemsFullScreenView(
@@ -1644,6 +1647,9 @@ struct GameInProgressView: View {
             .fullScreenCover(isPresented: $showBossFightAR) {
                 bossFightARContent
             }
+            .fullScreenCover(isPresented: $showArenaPvPAR) {
+                arenaPvPARContent
+            }
             .sheet(item: $pendingAbilityUse) { pending in
                 if let caster = players.first(where: { $0.id == pending.casterID }) {
                     SessionAbilityActivationView(
@@ -1666,7 +1672,37 @@ struct GameInProgressView: View {
             }
     }
 
+    @ViewBuilder
+    private var sessionAbilitiesOverlayContent: some View {
+        if let activePlayer {
+            SessionAbilitiesHubView(
+                pool: sessionAbilityPool,
+                activePlayer: activePlayer,
+                playerGlow: turnGlowColor,
+                playerName: activePlayer.factionName,
+                canUseAbility: canUseSessionAbility,
+                onUseAbility: { ability in
+                    showSessionAbilitiesOverlay = false
+                    pendingAbilityUse = PendingSessionAbilityUse(
+                        ability: ability,
+                        casterID: activePlayer.id
+                    )
+                },
+                onExit: {
+                    settings.playTapSound()
+                    showSessionAbilitiesOverlay = false
+                },
+                trikiExitHighlighted: selectedTrikiButton == .abilitiesExit,
+                trikiHoldChargeProgress: trikiHoldChargeProgress
+            )
+        }
+    }
+
     private var gameplayLifecycleLayer: some View {
+        gameplayLifecycleTurnLayer
+    }
+
+    private var gameplayLifecycleSelectionLayer: some View {
         gameplayPresentationLayer
             .onChange(of: startFieldPhase) { _, phase in
                 reconcileTrikiSelection(resetToFirst: true)
@@ -1678,6 +1714,9 @@ struct GameInProgressView: View {
                 reconcileTrikiSelection(resetToFirst: true)
             }
             .onChange(of: showPlayerStatsOverlay) { _, _ in
+                reconcileTrikiSelection(resetToFirst: true)
+            }
+            .onChange(of: showSessionAbilitiesOverlay) { _, _ in
                 reconcileTrikiSelection(resetToFirst: true)
             }
             .onChange(of: showPlayerItemsOverlay) { _, _ in
@@ -1703,6 +1742,10 @@ struct GameInProgressView: View {
                     resumeGameplayQRAfterLoad()
                 }
             }
+    }
+
+    private var gameplayLifecycleTurnLayer: some View {
+        gameplayLifecycleSelectionLayer
             .onChange(of: turnState.turnAdvanceCount) { _, _ in
                 fluctuateOwnedItemValuesOnTurnAdvance()
                 PowerPathEngine.tickTurnCooldowns(progress: &playerPowerPathProgress)
@@ -1750,6 +1793,9 @@ struct GameInProgressView: View {
         if restoredSnapshot == nil {
             initializeSessionAbilitiesOnStart()
         } else {
+            for player in players {
+                sessionAbilityPool.ensurePlayer(player.id)
+            }
             syncGrantedAbilityIDsFromPool()
             ensureBoardPositionsForAllPlayers()
         }
@@ -2087,8 +2133,6 @@ struct GameInProgressView: View {
                 }
 
                 turnActionsSection
-                sessionAbilityPoolSection
-                playerAbilitiesSection
                 if isBossFightActive {
                     bossFightAbilitiesSection
                 }
@@ -2151,6 +2195,14 @@ struct GameInProgressView: View {
 
     private var turnActionsSection: some View {
         VStack(spacing: 12) {
+            if let activePlayer {
+                SessionAbilitiesRevealSection(
+                    isTrikiSelected: selectedTrikiButton == .showAbilities,
+                    trikiHoldChargeProgress: trikiHoldChargeProgress,
+                    isScreenPresented: $showSessionAbilitiesOverlay
+                )
+            }
+
             Button {
                 settings.playTapSound()
                 skipActiveTurn()
@@ -2166,11 +2218,6 @@ struct GameInProgressView: View {
                 chargeProgress: selectedTrikiButton == .skipTurn ? trikiHoldChargeProgress : 0
             )
 
-            Text("Skan QR po pokazaniu tury: 2001–2005, 9001 (pomiń), 9002 (przedmioty). Przy blokadzie kolejki działa tylko 9001.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
             if settings.trikiControllerEnabled {
                 VStack(spacing: 4) {
                     if !trikiCoordinator.connectionMessage.isEmpty {
@@ -2183,7 +2230,7 @@ struct GameInProgressView: View {
                         .font(.caption2.bold())
                         .foregroundStyle(settings.accentColor)
                         .multilineTextAlignment(.center)
-                    Text("Krótki klik — następny przycisk; przytrzymaj 1,5 s — jaśniejsze tło, potem wybór.")
+                    Text("Krótki klik — następny przycisk; przytrzymaj 0,8 s — jaśniejsze tło, potem wybór.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -2196,10 +2243,6 @@ struct GameInProgressView: View {
                 }
             }
         }
-    }
-
-    private var sessionAbilityPoolSection: some View {
-        SessionAbilityPoolSummaryView(pool: sessionAbilityPool)
     }
 
     private var trikiPairingOverlay: some View {
@@ -2238,75 +2281,6 @@ struct GameInProgressView: View {
             .frame(maxWidth: 340)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         }
-    }
-
-    private var playerAbilitiesSection: some View {
-        Group {
-            if let activePlayer {
-                let abilities = grantedSessionAbilities(for: activePlayer.id)
-                if !abilities.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Twoje zdolności (jednorazowe)", systemImage: "sparkles")
-                            .font(.headline)
-                        Text("Po użyciu zdolność znika — trzeba ją ponownie odblokować w trakcie gry. Statystyka „Zdolności” to liczba posiadanych zdolności.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        ForEach(abilities) { ability in
-                            sessionAbilityButton(
-                                ability,
-                                casterID: activePlayer.id,
-                                isTrikiSelected: selectedTrikiButton == .ability(ability.id)
-                            )
-                        }
-                        if !lastAbilityOutcome.isEmpty {
-                            Text(lastAbilityOutcome)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                }
-            }
-        }
-    }
-
-    private func sessionAbilityButton(
-        _ ability: GameplaySessionAbility,
-        casterID: UUID,
-        isTrikiSelected: Bool = false
-    ) -> some View {
-        Button {
-            settings.playTapSound()
-            pendingAbilityUse = PendingSessionAbilityUse(ability: ability, casterID: casterID)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(ability.name)
-                        .font(.subheadline.bold())
-                    Spacer()
-                    Text(ability.kindLabel)
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.white.opacity(0.12), in: Capsule())
-                }
-                Text(ability.effectDescription)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 12)
-            .liquidGlassButtonBackground(prominent: true, cornerRadius: 12)
-        }
-        .buttonStyle(.plain)
-        .trikiSelectableHighlight(
-            isSelected: isTrikiSelected,
-            chargeProgress: isTrikiSelected ? trikiHoldChargeProgress : 0
-        )
     }
 
     private var bossFightAbilitiesSection: some View {
@@ -2378,6 +2352,76 @@ struct GameInProgressView: View {
         }
     }
 
+    private var arenaPvPARContent: some View {
+        ArenaPvPARView(
+            players: players,
+            playerStats: playerStats,
+            playerExperiencePoints: playerPowerPathProgress.mapValues(\.experiencePoints),
+            playerEquippedItems: playerEquippedItems,
+            catalogItems: creatorStore.catalog.items,
+            sessionAbilityPool: $sessionAbilityPool,
+            onAbilityConsumed: { playerID, abilityID in
+                if var ids = playerGrantedAbilityIDs[playerID] {
+                    ids.removeAll { $0 == abilityID }
+                    playerGrantedAbilityIDs[playerID] = ids.isEmpty ? nil : ids
+                }
+                syncAbilityStatCount(for: playerID)
+            },
+            onSettled: { outcome in
+                applyArenaPvPOutcome(outcome)
+            },
+            onExit: {
+                isArenaPvPActive = false
+                showArenaPvPAR = false
+                syncGameplayQRScanningState()
+            }
+        )
+    }
+
+    private func applyArenaPvPOutcome(_ outcome: ArenaPvPOutcome) {
+        guard var winnerStats = playerStats[outcome.winnerID],
+              var loserStats = playerStats[outcome.loserID] else { return }
+
+        let transfer = outcome.transferAmount
+        let xpTransfer = outcome.xpTransfer
+
+        if transfer > 0 {
+            loserStats.finances = max(0, loserStats.finances - transfer)
+            winnerStats.finances += transfer
+            setPlayerStats(loserStats, for: outcome.loserID, financesAnimation: .suppressed)
+            setPlayerStats(winnerStats, for: outcome.winnerID, financesAnimation: .suppressed)
+
+            if shouldAnimateFinancesChangesAutomatically {
+                queueFinancesChangeAnimation(delta: transfer)
+                queueFinancesChangeAnimation(delta: -transfer)
+            }
+        }
+
+        if xpTransfer > 0 {
+            _ = PowerPathEngine.grantExperience(-xpTransfer, playerID: outcome.loserID, progress: &playerPowerPathProgress)
+            _ = PowerPathEngine.grantExperience(xpTransfer, playerID: outcome.winnerID, progress: &playerPowerPathProgress)
+        }
+
+        logArenaPvPResult(outcome: outcome, transfer: transfer, xpTransfer: xpTransfer)
+    }
+
+    private func logArenaPvPResult(outcome: ArenaPvPOutcome, transfer: Int, xpTransfer: Int) {
+        let winnerName = players.first { $0.id == outcome.winnerID }?.displayTitle ?? "Gracz"
+        let loserName = players.first { $0.id == outcome.loserID }?.displayTitle ?? "Gracz"
+        var message = "Arena PvP: \(winnerName) wygrywa."
+        if transfer > 0 {
+            message += " \(loserName) traci \(transfer) monet, \(winnerName) zyskuje \(transfer)."
+        }
+        if xpTransfer > 0 {
+            message += " \(loserName) traci \(xpTransfer) XP, \(winnerName) zyskuje \(xpTransfer) XP."
+        }
+        turnState.logCustomEvent(
+            playerName: winnerName,
+            message: message,
+            turnMessage: "Arena PvP zakończona."
+        )
+    }
+
     private func handleBossFightCombatOutcome(_ outcome: BossFightCombatOutcome) {
         let participantIDs = [outcome.mainPlayerID] + outcome.supporterIDs
         recordBossFightParticipation(for: participantIDs)
@@ -2404,14 +2448,14 @@ struct GameInProgressView: View {
     }
 
     private func buildBossVictoryPresentation(for outcome: BossFightCombatOutcome) -> BossFightVictoryPresentation? {
-        let participantIDs = [outcome.mainPlayerID] + outcome.supporterIDs
-        let totalPool = participantIDs.compactMap { playerStats[$0]?.finances }.reduce(0, +)
+        let totalPool = outcome.bossDifficulty.victoryCoinPool
         let split = BossFightStatsCalculator.financeRewardSplit(
             totalPool: totalPool,
             supporterCount: outcome.supporterIDs.count
         )
         let mainPercentLabel = outcome.supporterIDs.isEmpty ? "100%" : "80%"
         let supporterPercentLabel = "20%"
+        let bossXP = bossVictoryXP(for: outcome.bossDifficulty)
 
         var steps: [BossFightVictoryRewardStep] = []
 
@@ -2427,7 +2471,9 @@ struct GameInProgressView: View {
                     characterQRCode: main.qrCode,
                     financesBefore: stats.finances,
                     rewardAmount: split.mainShare,
-                    rewardPercentLabel: mainPercentLabel
+                    rewardPercentLabel: mainPercentLabel,
+                    xpBefore: PowerPathEngine.progress(for: main.id, in: playerPowerPathProgress).experiencePoints,
+                    rewardXP: bossXP
                 )
             )
         }
@@ -2445,7 +2491,9 @@ struct GameInProgressView: View {
                     characterQRCode: player.qrCode,
                     financesBefore: stats.finances,
                     rewardAmount: split.supporterShare,
-                    rewardPercentLabel: supporterPercentLabel
+                    rewardPercentLabel: supporterPercentLabel,
+                    xpBefore: PowerPathEngine.progress(for: player.id, in: playerPowerPathProgress).experiencePoints,
+                    rewardXP: bossXP
                 )
             )
         }
@@ -2455,7 +2503,8 @@ struct GameInProgressView: View {
     }
 
     private func finishBossVictoryOverlay(_ presentation: BossFightVictoryPresentation) {
-        applyBossVictoryRewards(presentationSteps: presentation.steps, outcome: presentation.outcome)
+        guard let bossOutcome = presentation.bossOutcome else { return }
+        applyBossVictoryRewards(presentationSteps: presentation.steps, outcome: bossOutcome)
         bossVictoryPresentation = nil
         syncGameplayQRScanningState()
     }
@@ -2980,78 +3029,13 @@ struct GameInProgressView: View {
 
     private func handleTrikiMotionGestureFromCoordinator() {
         guard let kind = trikiCoordinator.lastMotionGesture else { return }
-        let gesture: TrikiRuntimeGesture? = switch kind {
-        case .rotateLeft: .rotateLeft
-        case .rotateRight: .rotateRight
-        case .shake: .shake
-        case .slide: .slide
-        case .click, .physicalButton: nil
-        }
-        guard let gesture else { return }
-        handleTrikiGesture(gesture)
-    }
-
-    private func handleTrikiGesture(_ gesture: TrikiRuntimeGesture) {
-        guard settings.trikiControllerEnabled, acceptsTrikiInputForGestures else { return }
-        let rules = creatorStore.gameRules.trikiGestures
-        let action: TrikiGestureAction
-        switch gesture {
-        case .slide: action = rules.slide
-        case .rotateLeft: action = rules.rotateLeft
-        case .rotateRight: action = rules.rotateRight
-        case .click: action = rules.click
-        case .shake: action = rules.shake
-        }
-        performTrikiAction(action)
-    }
-
-    private var acceptsTrikiInputForGestures: Bool {
-        settings.trikiControllerEnabled && !showBossFightAR
-    }
-
-    private func performTrikiAction(_ action: TrikiGestureAction) {
-        guard settings.trikiControllerEnabled else { return }
-        reconcileTrikiSelection()
-        switch action {
-        case .none:
-            trikiCoordinator.statusMessage = "Ten gest nie ma przypisanej akcji."
-        case .listDown:
-            trikiCoordinator.cycleSelectionForward()
-        case .listUp:
-            trikiCoordinator.cycleSelectionBackward()
-        case .selectOption:
-            trikiCoordinator.activateHighlightedSelection()
-        case .skipTurn:
-            if activeQueueBlockRounds > 0 {
-                skipBlockedQueueTurn()
-            } else {
-                skipActiveTurn()
-            }
-            trikiCoordinator.statusMessage = "Wykonano: pominięcie tury."
-        case .saveGame:
-            saveGame()
-            trikiCoordinator.statusMessage = "Wykonano: zapis gry."
-        case .showItems:
-            if let index = trikiSelectableButtons.firstIndex(of: .showItems) {
-                trikiCoordinator.selectionIndex = index
-            }
-            activateTrikiButton(.showItems)
-        case .showOwnStats:
-            if let index = trikiSelectableButtons.firstIndex(of: .showStats) {
-                trikiCoordinator.selectionIndex = index
-            }
-            activateTrikiButton(.showStats)
-        case .useStealAbility:
-            triggerTrikiStealAbility()
-        case .attack:
-            pendingTrikiBossMove = .attack
-            trikiCoordinator.statusMessage = "Ruch bossa: Atak."
-        case .defense:
-            pendingTrikiBossMove = .defense
-            trikiCoordinator.statusMessage = "Ruch bossa: Obrona."
-        case .strongAttack:
-            pendingTrikiBossMove = .strongAttack
-            trikiCoordinator.statusMessage = "Ruch bossa: Mocny atak."
+        // Nawigacja w rozgrywce: wyłącznie fizyczny przycisk (coordinator.processPhysicalButton).
+        switch kind {
+        case .bowRelease, .swordSwing:
+            break
+        case .rotateLeft, .rotateRight, .moveForward, .moveBackward,
+             .strafeLeft, .strafeRight, .shake, .physicalButton, .speedBurst:
+            return
         }
     }
 
@@ -3073,6 +3057,10 @@ struct GameInProgressView: View {
             settings.playStatsRevealSound()
             showPlayerItemsOverlay = true
             trikiCoordinator.statusMessage = "Wciśnięto: Pokaż Ekwipunek."
+        case .showAbilities:
+            settings.playTapSound()
+            showSessionAbilitiesOverlay = true
+            trikiCoordinator.statusMessage = "Wciśnięto: Zdolności."
         case .skipTurn:
             if activeQueueBlockRounds > 0 {
                 skipBlockedQueueTurn()
@@ -3189,6 +3177,9 @@ struct GameInProgressView: View {
         case .statsExit:
             settings.playTapSound()
             showPlayerStatsOverlay = false
+        case .abilitiesExit:
+            settings.playTapSound()
+            showSessionAbilitiesOverlay = false
             trikiCoordinator.statusMessage = "Wciśnięto: Wyjdź."
         case .finishCampaign:
             settings.playTapSound()
@@ -3244,6 +3235,8 @@ struct GameInProgressView: View {
             return shopPhase != .hidden
         case .bossFight:
             return showBossFightAR
+        case .arenaPvP:
+            return showArenaPvPAR
         }
     }
 
@@ -3266,6 +3259,9 @@ struct GameInProgressView: View {
             finishShop()
         case .bossFight:
             showBossFightAR = false
+        case .arenaPvP:
+            showArenaPvPAR = false
+            isArenaPvPActive = false
         }
     }
 
@@ -3279,6 +3275,8 @@ struct GameInProgressView: View {
             return artifactDrawSession != nil
         case .bossFight:
             return showBossFightAR
+        case .arenaPvP:
+            return showArenaPvPAR
         case .shop:
             return shopPhase != .hidden
         case .specialCard:
@@ -3646,12 +3644,24 @@ struct GameInProgressView: View {
 
         if event == .bossFight {
             isBossFightActive = true
-            _ = sessionAbilityPool.unlockRandom(count: 1)
+            _ = grantSessionAbility(to: activePlayer)
             showBossFightAR = true
             turnState.logCustomEvent(
                 playerName: activePlayer.className,
                 message: "Rozpoczęto walkę z bossem — tryb AR (skan QR gracza i walka turowa).",
                 turnMessage: "Walka z bossem — skanuj QR gracza w trybie AR."
+            )
+            recommendations = [:]
+            return
+        }
+
+        if event == .arenaPvP {
+            isArenaPvPActive = true
+            showArenaPvPAR = true
+            turnState.logCustomEvent(
+                playerName: activePlayer.className,
+                message: "Arena PvP — zeskanuj dwóch graczy w AR, potem walka na energię.",
+                turnMessage: "Arena PvP — skanuj QR graczy (4001–4004)."
             )
             recommendations = [:]
             return
@@ -3751,7 +3761,9 @@ struct GameInProgressView: View {
             || campaignStoryFinished
             || showGameplayStartIntro
             || isBossFightActive
+            || isArenaPvPActive
             || showBossFightAR
+            || showArenaPvPAR
             || turnChangePresentation != nil
             || skipTurnPlayerName != nil
             || specialCardDrawSession != nil
@@ -3973,12 +3985,8 @@ struct GameInProgressView: View {
     }
 
     private func initializeSessionAbilitiesOnStart() {
-        let unlocked = sessionAbilityPool.unlockRandom(count: 2)
-        if !unlocked.isEmpty {
-            turnState.logCustomEvent(
-                playerName: "Sesja",
-                message: "Przygotowano pulę 10 zdolności. Odblokowano: \(unlocked.map(\.name).joined(separator: ", "))."
-            )
+        for player in players {
+            sessionAbilityPool.ensurePlayer(player.id)
         }
         ensureBoardPositionsForAllPlayers()
     }
@@ -3990,14 +3998,13 @@ struct GameInProgressView: View {
     }
 
     private func syncGrantedAbilityIDsFromPool() {
-        var map: [UUID: [UUID]] = [:]
+        let sessionIDs = Set(sessionAbilityPool.abilities.map(\.id))
         for player in players {
-            let ids = sessionAbilityPool.heldAbilityIDs(for: player.id)
-            if !ids.isEmpty {
-                map[player.id] = ids
-            }
+            var ids = playerGrantedAbilityIDs[player.id] ?? []
+            ids.removeAll { sessionIDs.contains($0) }
+            ids.append(contentsOf: sessionAbilityPool.collectedAbilityIDs(for: player.id))
+            playerGrantedAbilityIDs[player.id] = ids.isEmpty ? nil : ids
         }
-        playerGrantedAbilityIDs = map
     }
 
     @discardableResult
@@ -4028,7 +4035,21 @@ struct GameInProgressView: View {
     }
 
     private func grantedSessionAbilities(for playerID: UUID) -> [GameplaySessionAbility] {
-        sessionAbilityPool.heldAbilityIDs(for: playerID).compactMap { sessionAbilityPool.ability(id: $0) }
+        sessionAbilityPool.collectedAbilities(for: playerID)
+    }
+
+    private func canUseSessionAbility(_ ability: GameplaySessionAbility) -> Bool {
+        switch ability.scope {
+        case .board:
+            return inGameScreen == .gameplay
+                && !showBossFightAR
+                && !showArenaPvPAR
+                && !isArenaPvPActive
+        case .bossFight:
+            return showBossFightAR || isBossFightActive
+        case .arenaPvP:
+            return showArenaPvPAR || isArenaPvPActive
+        }
     }
 
     private func confirmSessionAbilityUse(
@@ -4039,6 +4060,16 @@ struct GameInProgressView: View {
     ) {
         pendingAbilityUse = nil
         guard let caster = players.first(where: { $0.id == casterID }) else { return }
+
+        guard canUseSessionAbility(ability) else {
+            lastAbilityOutcome = "„\(ability.name)” działa tylko w: \(ability.scope.label)."
+            turnState.logCustomEvent(
+                playerName: caster.className,
+                message: lastAbilityOutcome,
+                turnMessage: "Zdolność niedostępna w tym momencie."
+            )
+            return
+        }
 
         var outcomeParts: [String] = []
 
@@ -4158,11 +4189,17 @@ struct GameInProgressView: View {
         if decisionIndex < campaign.decisions.count - 1 {
             decisionIndex += 1
             sceneIndex = activePlayerSceneIndex()
-            let unlocked = sessionAbilityPool.unlockRandom(count: 1)
-            if let ability = unlocked.first {
+            if let activePlayer,
+               let ability = sessionAbilityPool.grantRandom(to: activePlayer.id) {
+                var ids = playerGrantedAbilityIDs[activePlayer.id] ?? []
+                if !ids.contains(ability.id) {
+                    ids.append(ability.id)
+                    playerGrantedAbilityIDs[activePlayer.id] = ids
+                    syncAbilityStatCount(for: activePlayer.id)
+                }
                 turnState.logCustomEvent(
-                    playerName: "Sesja",
-                    message: "Odblokowano zdolność sesji: \(ability.name)."
+                    playerName: activePlayer.className,
+                    message: "Zebrano zdolność sesji: \(ability.name)."
                 )
             }
             return false

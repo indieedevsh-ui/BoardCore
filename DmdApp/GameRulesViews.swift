@@ -86,7 +86,6 @@ struct GameRulesFieldEditorView: View {
                 case .bossFight: bossSection
                 case .artifact: artifactSection
                 case .specialCard: specialCardSection
-                case .trikiGestures: trikiGesturesSection
                 }
             }
             .padding()
@@ -157,59 +156,6 @@ struct GameRulesFieldEditorView: View {
                     .padding(.vertical, 14)
             }
             .buttonStyle(.appSecondary)
-        }
-    }
-
-    private var trikiGesturesSection: some View {
-        Group {
-            trikiGesturePicker(
-                title: "Po pochyleniu do przodu",
-                selection: $rules.trikiGestures.slide
-            )
-            trikiGesturePicker(
-                title: "Po obrocie w lewo",
-                selection: $rules.trikiGestures.rotateLeft
-            )
-            trikiGesturePicker(
-                title: "Po obrocie w prawo",
-                selection: $rules.trikiGestures.rotateRight
-            )
-            trikiGesturePicker(
-                title: "Po kliknięciu",
-                selection: $rules.trikiGestures.click
-            )
-            trikiGesturePicker(
-                title: "Po potrząśnięciu",
-                selection: $rules.trikiGestures.shake
-            )
-        }
-    }
-
-    private func trikiGesturePicker(
-        title: String,
-        selection: Binding<TrikiGestureAction>
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Picker(title, selection: selection) {
-                ForEach(TrikiGestureAction.allCases) { action in
-                    Text(action.title).tag(action)
-                }
-            }
-            .pickerStyle(.menu)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(accent.opacity(0.35), lineWidth: 1)
-            )
         }
     }
 }

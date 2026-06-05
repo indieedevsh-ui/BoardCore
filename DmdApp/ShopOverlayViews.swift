@@ -279,7 +279,8 @@ private struct ShopBuyItemCard: View {
                     ShopEquipBonusBadge(
                         icon: bonus.icon,
                         label: bonus.label,
-                        bonus: bonus.bonus
+                        bonus: bonus.bonus,
+                        showsPercent: bonus.showsPercent
                     )
                 }
             }
@@ -344,7 +345,8 @@ private struct ShopSellItemCard: View {
                     ShopEquipBonusBadge(
                         icon: bonus.icon,
                         label: bonus.label,
-                        bonus: bonus.bonus
+                        bonus: bonus.bonus,
+                        showsPercent: bonus.showsPercent
                     )
                 }
             }
@@ -387,12 +389,13 @@ private struct ShopEquipBonusBadge: View {
     let icon: String
     let label: String
     let bonus: Int
+    var showsPercent: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .foregroundStyle(accentColor)
-            Text("+\(bonus) \(label)")
+            Text(formattedBonus)
                 .font(.subheadline.bold())
                 .monospacedDigit()
                 .foregroundStyle(accentColor)
@@ -404,13 +407,28 @@ private struct ShopEquipBonusBadge: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(accentColor.opacity(0.35), lineWidth: 1)
         }
-        .accessibilityLabel("Zwiększa \(label.lowercased()) o \(bonus)")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var formattedBonus: String {
+        if showsPercent {
+            return "+\(bonus)% \(label)"
+        }
+        return "+\(bonus) \(label)"
+    }
+
+    private var accessibilityText: String {
+        if showsPercent {
+            return "Zwiększa \(label) o \(bonus) procent"
+        }
+        return "Zwiększa \(label.lowercased()) o \(bonus)"
     }
 
     private var accentColor: Color {
         switch label {
         case "Siła": .red
         case "Zdrowie": .green
+        case "szansy artefaktów": .cyan
         default: .secondary
         }
     }

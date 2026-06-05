@@ -11,6 +11,20 @@ enum GameplaySessionAbilityKind: String, Codable, Hashable, CaseIterable {
     case temporaryStatBoost
 }
 
+enum GameplaySessionAbilityScope: String, Codable, Hashable, CaseIterable {
+    case bossFight
+    case arenaPvP
+    case board
+
+    var label: String {
+        switch self {
+        case .bossFight: "Walka z bossem"
+        case .arenaPvP: "Arena PvP"
+        case .board: "Plansza"
+        }
+    }
+}
+
 enum SessionStatBoostTarget: String, Codable, Hashable, CaseIterable {
     case character
     case weapon
@@ -32,12 +46,65 @@ struct GameplaySessionAbility: Identifiable, Codable, Hashable {
     var effectDescription: String
     var elementCategory: String
     var kind: GameplaySessionAbilityKind
+    var scope: GameplaySessionAbilityScope
     var turnDamage: Int
     var damageTurns: Int
     var boardMaxSpaces: Int
     var statBoostAmount: Int
     var statBoostTurns: Int
     var statBoostTarget: SessionStatBoostTarget
+
+    enum CodingKeys: String, CodingKey {
+        case id, numericId, name, effectDescription, elementCategory, kind, scope
+        case turnDamage, damageTurns, boardMaxSpaces, statBoostAmount, statBoostTurns, statBoostTarget
+    }
+
+    init(
+        id: UUID,
+        numericId: String,
+        name: String,
+        effectDescription: String,
+        elementCategory: String,
+        kind: GameplaySessionAbilityKind,
+        scope: GameplaySessionAbilityScope,
+        turnDamage: Int,
+        damageTurns: Int,
+        boardMaxSpaces: Int,
+        statBoostAmount: Int,
+        statBoostTurns: Int,
+        statBoostTarget: SessionStatBoostTarget
+    ) {
+        self.id = id
+        self.numericId = numericId
+        self.name = name
+        self.effectDescription = effectDescription
+        self.elementCategory = elementCategory
+        self.kind = kind
+        self.scope = scope
+        self.turnDamage = turnDamage
+        self.damageTurns = damageTurns
+        self.boardMaxSpaces = boardMaxSpaces
+        self.statBoostAmount = statBoostAmount
+        self.statBoostTurns = statBoostTurns
+        self.statBoostTarget = statBoostTarget
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        numericId = try container.decode(String.self, forKey: .numericId)
+        name = try container.decode(String.self, forKey: .name)
+        effectDescription = try container.decode(String.self, forKey: .effectDescription)
+        elementCategory = try container.decode(String.self, forKey: .elementCategory)
+        kind = try container.decode(GameplaySessionAbilityKind.self, forKey: .kind)
+        scope = try container.decodeIfPresent(GameplaySessionAbilityScope.self, forKey: .scope) ?? .board
+        turnDamage = try container.decode(Int.self, forKey: .turnDamage)
+        damageTurns = try container.decode(Int.self, forKey: .damageTurns)
+        boardMaxSpaces = try container.decode(Int.self, forKey: .boardMaxSpaces)
+        statBoostAmount = try container.decode(Int.self, forKey: .statBoostAmount)
+        statBoostTurns = try container.decode(Int.self, forKey: .statBoostTurns)
+        statBoostTarget = try container.decode(SessionStatBoostTarget.self, forKey: .statBoostTarget)
+    }
 
     var asCreatedAbility: CreatedAbility {
         CreatedAbility(
@@ -52,13 +119,21 @@ struct GameplaySessionAbility: Identifiable, Codable, Hashable {
     var kindLabel: String {
         switch kind {
         case .turnDamage: "Obrażenia"
-        case .boardMove: "Plansza"
+        case .boardMove: "Ruch"
         case .temporaryStatBoost: "Wzmocnienie"
         }
     }
+
+    var scopeLabel: String {
+        "\(scope.label) · \(kindLabel)"
+    }
 }
 
-enum SessionAbilityAvailability: Codable, Hashable {
+struct PlayerSessionAbilityProgress: Codable, Hashable {
+    var collectedAbilityIDs: Set<UUID> = []
+}
+
+private enum LegacySessionAbilityAvailability: Codable, Hashable {
     case locked
     case unlocked
     case held(by: UUID)
@@ -68,81 +143,132 @@ struct GameplaySessionAbilityPoolState: Codable, Hashable {
     static let poolSize = 10
 
     var abilities: [GameplaySessionAbility]
-    var availability: [UUID: SessionAbilityAvailability]
+    var playerProgress: [UUID: PlayerSessionAbilityProgress]
 
-    var unlockedCount: Int {
-        availability.values.filter {
-            if case .unlocked = $0 { return true }
-            return false
-        }.count
+    enum CodingKeys: String, CodingKey {
+        case abilities
+        case playerProgress
+        case availability
     }
 
-    var lockedCount: Int {
-        availability.values.filter {
-            if case .locked = $0 { return true }
-            return false
-        }.count
+    init(abilities: [GameplaySessionAbility], playerProgress: [UUID: PlayerSessionAbilityProgress] = [:]) {
+        self.abilities = abilities
+        self.playerProgress = playerProgress
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        abilities = try container.decode([GameplaySessionAbility].self, forKey: .abilities)
+        if let progress = try container.decodeIfPresent([UUID: PlayerSessionAbilityProgress].self, forKey: .playerProgress) {
+            playerProgress = progress
+        } else if let legacy = try container.decodeIfPresent(
+            [UUID: LegacySessionAbilityAvailability].self,
+            forKey: .availability
+        ) {
+            playerProgress = Self.migrateLegacyAvailability(legacy)
+        } else {
+            playerProgress = [:]
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(abilities, forKey: .abilities)
+        try container.encode(playerProgress, forKey: .playerProgress)
+    }
+
+    private static func migrateLegacyAvailability(
+        _ availability: [UUID: LegacySessionAbilityAvailability]
+    ) -> [UUID: PlayerSessionAbilityProgress] {
+        var migrated: [UUID: PlayerSessionAbilityProgress] = [:]
+        for (abilityID, state) in availability {
+            guard case .held(let playerID) = state else { continue }
+            var progress = migrated[playerID] ?? PlayerSessionAbilityProgress()
+            progress.collectedAbilityIDs.insert(abilityID)
+            migrated[playerID] = progress
+        }
+        return migrated
     }
 
     func ability(id: UUID) -> GameplaySessionAbility? {
         abilities.first { $0.id == id }
     }
 
-    mutating func unlockRandom(count: Int = 1) -> [GameplaySessionAbility] {
-        var unlocked: [GameplaySessionAbility] = []
-        for _ in 0..<count {
-            let locked = abilities.filter {
-                if case .locked = availability[$0.id, default: .locked] { return true }
-                return false
-            }
-            guard let pick = locked.randomElement() else { break }
-            availability[pick.id] = .unlocked
-            unlocked.append(pick)
+    mutating func ensurePlayer(_ playerID: UUID) {
+        if playerProgress[playerID] == nil {
+            playerProgress[playerID] = PlayerSessionAbilityProgress()
         }
-        return unlocked
+    }
+
+    func collectedCount(for playerID: UUID) -> Int {
+        playerProgress[playerID]?.collectedAbilityIDs.count ?? 0
+    }
+
+    func hasCollected(_ abilityID: UUID, for playerID: UUID) -> Bool {
+        playerProgress[playerID]?.collectedAbilityIDs.contains(abilityID) ?? false
+    }
+
+    func collectedAbilityIDs(for playerID: UUID) -> [UUID] {
+        Array(playerProgress[playerID]?.collectedAbilityIDs ?? []).sorted { $0.uuidString < $1.uuidString }
+    }
+
+    func collectedAbilities(for playerID: UUID) -> [GameplaySessionAbility] {
+        let ids = playerProgress[playerID]?.collectedAbilityIDs ?? []
+        return abilities.filter { ids.contains($0.id) }
+    }
+
+    @discardableResult
+    mutating func collectRandom(for playerID: UUID, count: Int = 1) -> [GameplaySessionAbility] {
+        ensurePlayer(playerID)
+        var granted: [GameplaySessionAbility] = []
+        for _ in 0..<count {
+            let owned = playerProgress[playerID]?.collectedAbilityIDs ?? []
+            let candidates = abilities.filter { !owned.contains($0.id) }
+            guard let pick = candidates.randomElement() else { break }
+            playerProgress[playerID]?.collectedAbilityIDs.insert(pick.id)
+            granted.append(pick)
+        }
+        return granted
     }
 
     @discardableResult
     mutating func grantRandom(to playerID: UUID) -> GameplaySessionAbility? {
-        if unlockedCount == 0 {
-            _ = unlockRandom()
-        }
-
-        let grantable = abilities.filter {
-            availability[$0.id, default: .locked] == .unlocked
-        }
-        guard let pick = grantable.randomElement() else { return nil }
-        availability[pick.id] = .held(by: playerID)
-        return pick
+        collectRandom(for: playerID, count: 1).first
     }
 
     mutating func consume(abilityID: UUID, from playerID: UUID) {
-        guard case .held(by: playerID) = availability[abilityID, default: .locked] else { return }
-        availability[abilityID] = .locked
+        playerProgress[playerID]?.collectedAbilityIDs.remove(abilityID)
     }
 
     func heldAbilityIDs(for playerID: UUID) -> [UUID] {
-        abilities.compactMap { ability in
-            if case .held(by: playerID) = availability[ability.id, default: .locked] {
-                return ability.id
-            }
-            return nil
-        }
+        collectedAbilityIDs(for: playerID)
     }
 }
 
 enum GameplaySessionAbilityFactory {
+    private struct AbilityBlueprint {
+        let kind: GameplaySessionAbilityKind
+        let scope: GameplaySessionAbilityScope
+    }
+
     static func makePool(elements: [String]) -> GameplaySessionAbilityPoolState {
-        let kinds: [GameplaySessionAbilityKind] = [
-            .turnDamage, .turnDamage, .turnDamage, .turnDamage,
-            .boardMove, .boardMove, .boardMove,
-            .temporaryStatBoost, .temporaryStatBoost, .temporaryStatBoost,
+        let blueprints: [AbilityBlueprint] = [
+            AbilityBlueprint(kind: .turnDamage, scope: .bossFight),
+            AbilityBlueprint(kind: .turnDamage, scope: .bossFight),
+            AbilityBlueprint(kind: .turnDamage, scope: .arenaPvP),
+            AbilityBlueprint(kind: .turnDamage, scope: .arenaPvP),
+            AbilityBlueprint(kind: .boardMove, scope: .board),
+            AbilityBlueprint(kind: .boardMove, scope: .board),
+            AbilityBlueprint(kind: .boardMove, scope: .board),
+            AbilityBlueprint(kind: .temporaryStatBoost, scope: .bossFight),
+            AbilityBlueprint(kind: .temporaryStatBoost, scope: .arenaPvP),
+            AbilityBlueprint(kind: .temporaryStatBoost, scope: .board),
         ].shuffled()
 
         var usedNames: [String] = []
         var abilities: [GameplaySessionAbility] = []
 
-        for (index, kind) in kinds.enumerated() {
+        for (index, blueprint) in blueprints.enumerated() {
             let element = elements.randomElement() ?? "Standard"
             let name = uniqueName(
                 base: "\(nameParts.randomElement()!) \(nameSuffixes.randomElement()!)",
@@ -151,39 +277,42 @@ enum GameplaySessionAbilityFactory {
             )
             usedNames.append(name)
 
-            let ability = makeAbility(
-                index: index,
-                name: name,
-                element: element,
-                kind: kind
+            abilities.append(
+                makeAbility(
+                    index: index,
+                    name: name,
+                    element: element,
+                    kind: blueprint.kind,
+                    scope: blueprint.scope
+                )
             )
-            abilities.append(ability)
         }
 
-        let availability = Dictionary(uniqueKeysWithValues: abilities.map { ($0.id, SessionAbilityAvailability.locked) })
-        return GameplaySessionAbilityPoolState(abilities: abilities, availability: availability)
+        return GameplaySessionAbilityPoolState(abilities: abilities)
     }
 
     private static func makeAbility(
         index: Int,
         name: String,
         element: String,
-        kind: GameplaySessionAbilityKind
+        kind: GameplaySessionAbilityKind,
+        scope: GameplaySessionAbilityScope
     ) -> GameplaySessionAbility {
         let numericId = String(7_001 + index)
         let elementLabel = element.lowercased()
+        let scopeNote = "Działa tylko w kontekście: \(scope.label)."
 
         switch kind {
         case .turnDamage:
             let instant = Bool.random()
-            let damage = Int.random(in: 10...35)
-            let turns = instant ? 1 : Int.random(in: 2...4)
-            let perTurn = instant ? damage : Int.random(in: 6...18)
+            let burstDamage = Int.random(in: 32...58)
+            let turns = instant ? 1 : Int.random(in: 3...5)
+            let perTurn = instant ? burstDamage : Int.random(in: 18...34)
             let description: String
             if instant {
-                description = "\(name): zadaje \(damage) obrażeń \(elementLabel) jednemu wybranemu przeciwnikowi w tej turze (tylko cel, bez strefy)."
+                description = "\(name): potężny cios \(elementLabel) — \(burstDamage) obrażeń jednemu celowi. \(scopeNote)"
             } else {
-                description = "\(name): co turę przez \(turns) tury zadaje \(perTurn) obrażeń \(elementLabel) jednemu wybranemu graczowi."
+                description = "\(name): przez \(turns) tury co turę zadaje \(perTurn) obrażeń \(elementLabel) wybranemu celowi. \(scopeNote)"
             }
             return GameplaySessionAbility(
                 id: UUID(),
@@ -192,6 +321,7 @@ enum GameplaySessionAbilityFactory {
                 effectDescription: description,
                 elementCategory: element,
                 kind: .turnDamage,
+                scope: scope,
                 turnDamage: perTurn,
                 damageTurns: turns,
                 boardMaxSpaces: 0,
@@ -201,8 +331,8 @@ enum GameplaySessionAbilityFactory {
             )
 
         case .boardMove:
-            let spaces = Int.random(in: 1...4)
-            let description = "\(name): przesuń wybranego uczestnika na planszy o 1–\(spaces) pól do tyłu, do przodu lub w wybranym kierunku (pojedynczy cel)."
+            let spaces = Int.random(in: 3...7)
+            let description = "\(name): przesuwa wybranego gracza na planszy o do \(spaces) pól (do przodu lub do tyłu). \(scopeNote)"
             return GameplaySessionAbility(
                 id: UUID(),
                 numericId: numericId,
@@ -210,6 +340,7 @@ enum GameplaySessionAbilityFactory {
                 effectDescription: description,
                 elementCategory: element,
                 kind: .boardMove,
+                scope: scope,
                 turnDamage: 0,
                 damageTurns: 0,
                 boardMaxSpaces: spaces,
@@ -220,9 +351,9 @@ enum GameplaySessionAbilityFactory {
 
         case .temporaryStatBoost:
             let target = SessionStatBoostTarget.allCases.randomElement() ?? .character
-            let amount = Int.random(in: 8...20)
-            let turns = Int.random(in: 2...4)
-            let description = "\(name): tymczasowo +\(amount) do \(target.label.lowercased()) na \(turns) tury (jednorazowe użycie)."
+            let amount = Int.random(in: 28...48)
+            let turns = Int.random(in: 4...7)
+            let description = "\(name): +\(amount) do \(target.label.lowercased()) na \(turns) tur. \(scopeNote)"
             return GameplaySessionAbility(
                 id: UUID(),
                 numericId: numericId,
@@ -230,6 +361,7 @@ enum GameplaySessionAbilityFactory {
                 effectDescription: description,
                 elementCategory: element,
                 kind: .temporaryStatBoost,
+                scope: scope,
                 turnDamage: 0,
                 damageTurns: 0,
                 boardMaxSpaces: 0,

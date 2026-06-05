@@ -163,7 +163,7 @@ struct SettingsView: View {
                     }
 
                     SettingsSectionFooter(
-                        text: "Po włączeniu można sterować rozgrywką gestami Triki. Mapowanie gestów ustawisz w DevCentrum → Zmień reguły gry → Gesty Triki."
+                        text: "Po włączeniu sterujesz listą opcji krótkim kliknięciem i długim przytrzymaniem fizycznego przycisku na kontrolerze."
                     )
 
                     SettingsSectionHeader(title: "Dane")
@@ -298,25 +298,35 @@ private struct TrikiPairingSheet: View {
     }
 
     private var connectingContent: some View {
-        VStack(spacing: 18) {
-            ProgressView()
-                .controlSize(.large)
-
-            Text(coordinator.connectionMessage.isEmpty ? "Szukam połączenia z Triki…" : coordinator.connectionMessage)
+        VStack(spacing: 14) {
+            Text(coordinator.connectionMessage.isEmpty ? "Szukam urządzeń BLE…" : coordinator.connectionMessage)
                 .font(.headline.bold())
                 .multilineTextAlignment(.center)
 
-            Text("Włącz kontroler Triki i trzymaj go blisko iPhone’a.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 6)
-
-            Text("Po połączeniu poprosimy Cię o kalibrację pozycji neutralnej.")
+            Text("VeltoKit łączy się automatycznie z czapką „Triki” w nazwie BLE. Przy kolejnym uruchomieniu używa zapamiętanego urządzenia.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 6)
+
+            if !coordinator.isBLEConnected {
+                ProgressView()
+                    .controlSize(.large)
+                    .padding(.vertical, 8)
+            }
+
+            Button("Połącz (skan BLE)") {
+                settings.playTapSound()
+                coordinator.startScanningForPairing()
+            }
+            .buttonStyle(.appProminent)
+
+            if coordinator.hasCachedBLEDevice {
+                Button("Połącz z ostatnim urządzeniem") {
+                    settings.playTapSound()
+                    coordinator.connectToCachedDevice()
+                }
+                .buttonStyle(.appSecondary)
+            }
 
             Button("Anuluj") {
                 settings.playTapSound()
@@ -324,9 +334,11 @@ private struct TrikiPairingSheet: View {
                 onClose()
             }
             .buttonStyle(.appSecondary)
-            .padding(.top, 6)
         }
         .padding(24)
+        .onAppear {
+            coordinator.startScanningForPairing()
+        }
     }
 
     private var doneContent: some View {

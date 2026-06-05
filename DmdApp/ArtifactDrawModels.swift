@@ -140,11 +140,16 @@ struct ArtifactLootOdds {
         baseOdds: FieldCategoryOdds = .artifactDefaults()
     ) -> (odds: ArtifactLootOdds, brushName: String?, brushAbilityBonus: Int) {
         let owned = catalog.filter { ownedItemIDs.contains($0.id) }
-        guard let bestBrush = owned.filter(\.isBrush).max(by: { $0.cost < $1.cost }) else {
+        guard let bestBrush = owned.filter(\.isBrush).max(by: { lhs, rhs in
+            let left = CreatorStats.brushArtifactLuckPercent(for: lhs)
+            let right = CreatorStats.brushArtifactLuckPercent(for: rhs)
+            if left != right { return left < right }
+            return lhs.cost < rhs.cost
+        }) else {
             return (fromCategoryOdds(baseOdds), nil, 0)
         }
 
-        let abilityBonus = abilityBonusPercent(forBrushCost: bestBrush.cost)
+        let abilityBonus = CreatorStats.brushArtifactLuckPercent(for: bestBrush)
         var odds = fromCategoryOdds(baseOdds)
         odds = ArtifactLootOdds(
             misfortune: odds.misfortune,
@@ -155,17 +160,9 @@ struct ArtifactLootOdds {
         return (odds, bestBrush.name, abilityBonus)
     }
 
-    /// Bonus do szansy na zdolność z najlepszego posiadanego pędzla (wg ceny).
+    /// Bonus do szansy na zdolność z najlepszego posiadanego pędzla (wg statystyki %).
     static func forPlayer(ownedItemIDs: [UUID], catalog: [CreatedItem]) -> (odds: ArtifactLootOdds, brushName: String?, brushAbilityBonus: Int) {
         forPlayer(ownedItemIDs: ownedItemIDs, catalog: catalog, baseOdds: .artifactDefaults())
-    }
-
-    /// 1–100 → +5%, 100–150 → +10%, 150–200 → +15% (powyżej 200: +15%).
-    static func abilityBonusPercent(forBrushCost cost: Int) -> Int {
-        if cost >= 150 { return 15 }
-        if cost >= 100 { return 10 }
-        if cost >= 1 { return 5 }
-        return 0
     }
 }
 
