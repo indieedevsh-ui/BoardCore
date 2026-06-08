@@ -236,6 +236,19 @@ struct GameplaySessionAbilityPoolState: Codable, Hashable {
         collectRandom(for: playerID, count: 1).first
     }
 
+    func peekRandom(for playerID: UUID) -> GameplaySessionAbility? {
+        let owned = playerProgress[playerID]?.collectedAbilityIDs ?? []
+        return abilities.filter { !owned.contains($0.id) }.randomElement()
+    }
+
+    @discardableResult
+    mutating func grant(_ ability: GameplaySessionAbility, to playerID: UUID) -> GameplaySessionAbility? {
+        ensurePlayer(playerID)
+        guard !(playerProgress[playerID]?.collectedAbilityIDs.contains(ability.id) ?? false) else { return nil }
+        playerProgress[playerID]?.collectedAbilityIDs.insert(ability.id)
+        return ability
+    }
+
     mutating func consume(abilityID: UUID, from playerID: UUID) {
         playerProgress[playerID]?.collectedAbilityIDs.remove(abilityID)
     }

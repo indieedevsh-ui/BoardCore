@@ -15,6 +15,23 @@ enum SoundManager {
         playTone(volume: volume, frequency: 1_200, duration: 0.07, decay: 90, amplitudeScale: 0.35)
     }
 
+    /// Krótki, „kreskówkowy” klik przełącznika.
+    static func playCartoonToggle(volume: Double, turningOn: Bool) {
+        if turningOn {
+            playSequence(
+                volume: volume,
+                tones: [(380, 0.028, 0.58), (720, 0.038, 0.52), (940, 0.03, 0.34)],
+                gap: 0.01
+            )
+        } else {
+            playSequence(
+                volume: volume,
+                tones: [(860, 0.028, 0.5), (520, 0.038, 0.48), (300, 0.032, 0.32)],
+                gap: 0.01
+            )
+        }
+    }
+
     static func playSkipTurn(volume: Double) {
         playSequence(
             volume: volume,
@@ -511,6 +528,19 @@ enum HapticManager {
             let rigid = UIImpactFeedbackGenerator(style: .rigid)
             rigid.prepare()
             rigid.impactOccurred(intensity: strength * 0.92)
+        }
+    }
+
+    static func playCartoonToggle(intensity: Double, turningOn: Bool) {
+        guard intensity > 0.01 else { return }
+        let strength = CGFloat(min(max(intensity, 0), 1))
+        let snap = UIImpactFeedbackGenerator(style: .rigid)
+        snap.prepare()
+        snap.impactOccurred(intensity: min(1, strength * 1.05))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.018) {
+            let light = UIImpactFeedbackGenerator(style: turningOn ? .medium : .light)
+            light.prepare()
+            light.impactOccurred(intensity: strength * 0.82)
         }
     }
 

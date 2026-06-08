@@ -5,7 +5,8 @@
   --glow-rgb: 72, 132, 255;
   --accent: rgb(130, 168, 255);
   --text: rgba(255, 255, 255, 0.94);
-  --muted: rgba(190, 210, 255, 0.58);
+  --muted: #fff;
+  --tile-text: rgba(255, 255, 255, 0.8);
   --line: rgba(130, 168, 255, 0.16);
   --glass: rgba(255, 255, 255, 0.05);
   --radius: 16px;
@@ -155,7 +156,42 @@ a {
 }
 
 .hero {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
+}
+
+.platform-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.platform-pill {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tile-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+.platform-pill__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 .welcome-card {
@@ -167,7 +203,7 @@ a {
   margin: 0;
   font-size: 16px;
   line-height: 1.7;
-  color: var(--muted);
+  color: var(--tile-text);
 }
 
 .hero--compact {
@@ -203,9 +239,26 @@ a {
   color: var(--muted);
 }
 
-/* Liquid glass */
+/* Liquid glass + wolno obracający się refleks na obwódce */
+@property --border-angle {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.glass-card,
+.btn,
+.feature-item__icon,
+.download-item__icon,
+.platform-pill {
+  --border-angle: 0;
+  --border-shine-size: 1px;
+}
+
 .glass-card {
   position: relative;
+  isolation: isolate;
+  color: var(--tile-text);
   border-radius: var(--radius);
   background: var(--glass);
   backdrop-filter: blur(20px) saturate(150%);
@@ -215,17 +268,25 @@ a {
     0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
-.glass-card::before {
+.glass-card::before,
+.btn::before,
+.feature-item__icon::before,
+.download-item__icon::before,
+.platform-pill::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(var(--glow-rgb), 0.55) 0%,
-    rgba(var(--glow-rgb), 0.14) 42%,
-    rgba(255, 255, 255, 0.08) 100%
+  padding: var(--border-shine-size);
+  background: conic-gradient(
+    from calc(var(--border-angle) * 1deg) at 50% 50%,
+    transparent 0deg,
+    rgba(var(--glow-rgb), 0.14) 10deg,
+    rgba(255, 255, 255, 0.78) 26deg,
+    rgba(var(--glow-rgb), 0.96) 42deg,
+    rgba(var(--glow-rgb), 0.28) 58deg,
+    transparent 74deg,
+    transparent 360deg
   );
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -236,6 +297,13 @@ a {
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+  animation: border-shine-spin 190s linear infinite;
+}
+
+@keyframes border-shine-spin {
+  to {
+    --border-angle: 360;
+  }
 }
 
 /* Features */
@@ -256,6 +324,8 @@ a {
 }
 
 .feature-item__icon {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -289,7 +359,7 @@ a {
   display: block;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--muted);
+  color: var(--tile-text);
 }
 
 /* Downloads */
@@ -316,6 +386,8 @@ a {
 }
 
 .download-item__icon {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -349,7 +421,99 @@ a {
   display: block;
   font-size: 13px;
   line-height: 1.5;
+  color: var(--tile-text);
+}
+
+/* Instalacja na iPhone */
+.install-guide {
+  margin-top: 40px;
+}
+
+.install-guide__title {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 5vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.install-guide__lead {
+  margin: 0 0 20px;
+  max-width: 58ch;
+  font-size: 15px;
+  line-height: 1.65;
   color: var(--muted);
+}
+
+.install-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.install-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 22px;
+}
+
+.install-step__number {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tile-text);
+  background: linear-gradient(
+    145deg,
+    rgba(var(--glow-rgb), 0.28) 0%,
+    rgba(var(--glow-rgb), 0.08) 100%
+  );
+  box-shadow: inset 0 0 0 1px rgba(var(--glow-rgb), 0.32);
+}
+
+.install-step__body {
+  min-width: 0;
+}
+
+.install-step__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.install-step__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--tile-text);
+}
+
+.install-step__text strong {
+  color: var(--tile-text);
+  font-weight: 600;
+}
+
+.install-step__code {
+  display: block;
+  margin: 10px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tile-text);
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
 }
 
 /* License */
@@ -385,7 +549,7 @@ a {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--tile-text);
 }
 
 .license-card .card-text {
@@ -413,7 +577,7 @@ a {
   margin: 0;
   font-size: 15px;
   line-height: 1.65;
-  color: var(--muted);
+  color: var(--tile-text);
   max-width: 62ch;
 }
 
@@ -425,11 +589,11 @@ a {
   gap: 12px;
   font-size: 14px;
   line-height: 1.65;
-  color: var(--muted);
+  color: var(--tile-text);
 }
 
 .mechanic-list strong {
-  color: var(--text);
+  color: var(--tile-text);
   font-weight: 600;
 }
 
@@ -439,6 +603,8 @@ a {
 }
 
 .btn {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -551,5 +717,345 @@ a {
   .btn:hover {
     animation: none;
     transform: none;
+  }
+}
+
+/* Witaj — easter egg */
+.welcome-title {
+  display: inline-block;
+  cursor: pointer;
+  user-select: none;
+  transform-origin: left center;
+}
+
+.welcome-title:focus-visible {
+  outline: 2px solid rgba(var(--glow-rgb), 0.75);
+  outline-offset: 6px;
+  border-radius: 8px;
+}
+
+@keyframes welcome-bump {
+  0% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.welcome-title--bump {
+  animation: welcome-bump 0.28s var(--ease);
+}
+
+/* Kreskówkowy styl (jak w aplikacji BoardCore) */
+body.cartoon-mode {
+  --cartoon-font: "Fredoka", -apple-system, BlinkMacSystemFont, sans-serif;
+  --cartoon-ink: rgba(0, 0, 0, 0.68);
+  --cartoon-stroke: 3.5px;
+  --cartoon-radius: 22px;
+  --cartoon-radius-sm: 20px;
+  --cartoon-shadow: 5px 5px 0 rgba(0, 0, 0, 0.82);
+  --cartoon-fill-top: rgba(var(--glow-rgb), 0.72);
+  --cartoon-fill-mid: rgba(var(--glow-rgb), 0.48);
+  --cartoon-fill-low: rgba(var(--glow-rgb), 0.34);
+  font-family: var(--cartoon-font);
+  font-weight: 500;
+}
+
+body.cartoon-mode :where(
+  h1,
+  h2,
+  h3,
+  p,
+  li,
+  dt,
+  dd,
+  .brand__name,
+  .tab,
+  .btn,
+  .eyebrow,
+  .feature-item__label,
+  .feature-item__desc,
+  .download-item__label,
+  .download-item__desc,
+  .card-title,
+  .card-text,
+  .welcome-card__text,
+  .mechanic-list strong,
+  .platform-pills,
+  .platform-pill,
+  .install-guide__title,
+  .install-guide__lead,
+  .install-step__title,
+  .install-step__text,
+  .install-step__number
+) {
+  text-shadow:
+    -0.55px 0 var(--cartoon-ink),
+    0.55px 0 var(--cartoon-ink),
+    0 -0.55px var(--cartoon-ink),
+    0 0.55px var(--cartoon-ink),
+    -0.55px -0.55px var(--cartoon-ink),
+    0.55px -0.55px var(--cartoon-ink),
+    -0.55px 0.55px var(--cartoon-ink),
+    0.55px 0.55px var(--cartoon-ink);
+}
+
+body.cartoon-mode .glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 0.95px, transparent 0.96px);
+  background-size: 4.2px 3.86px;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+body.cartoon-mode .topbar {
+  position: fixed;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-bottom: 0;
+  border-top: 0;
+  background: #000;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.cartoon-mode .topbar__inner {
+  width: min(720px, calc(100% - 40px));
+  padding: 6px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+body.cartoon-mode .brand {
+  display: none;
+}
+
+body.cartoon-mode .tabs {
+  width: 100%;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  justify-content: stretch;
+}
+
+body.cartoon-mode .tab {
+  flex: 1;
+  border-radius: 0;
+  padding: 10px 6px;
+  font-family: var(--cartoon-font);
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.cartoon-mode .tab:hover {
+  color: #fff;
+}
+
+body.cartoon-mode .tab[aria-selected="true"] {
+  color: #fff;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.cartoon-mode .content {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+}
+
+body.cartoon-mode .glass-card {
+  border-radius: var(--cartoon-radius);
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 52%,
+    var(--cartoon-fill-low) 100%
+  );
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: var(--cartoon-stroke) solid rgba(0, 0, 0, 0.88);
+  box-shadow: var(--cartoon-shadow);
+  overflow: hidden;
+}
+
+body.cartoon-mode .platform-pill {
+  font-family: var(--cartoon-font);
+  font-weight: 500;
+  color: var(--tile-text);
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 52%,
+    var(--cartoon-fill-low) 100%
+  );
+  border: 2.5px solid rgba(0, 0, 0, 0.88);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.82);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.cartoon-mode .platform-pill__icon {
+  color: #fff;
+}
+
+body.cartoon-mode .install-guide__title,
+body.cartoon-mode .install-step__title {
+  font-family: var(--cartoon-font);
+  font-weight: 500;
+}
+
+body.cartoon-mode .install-step__number {
+  color: var(--tile-text);
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 100%
+  );
+  border: 2.5px solid rgba(0, 0, 0, 0.88);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.82);
+}
+
+body.cartoon-mode .install-step__text {
+  color: var(--tile-text);
+}
+
+body.cartoon-mode .install-step__code {
+  border: 2px solid rgba(0, 0, 0, 0.88);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+body.cartoon-mode .glass-card::before,
+body.cartoon-mode .btn::before,
+body.cartoon-mode .feature-item__icon::before,
+body.cartoon-mode .download-item__icon::before,
+body.cartoon-mode .platform-pill::before {
+  display: none;
+  animation: none;
+}
+
+body.cartoon-mode .glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 0.95px, transparent 0.96px);
+  background-size: 4.2px 3.86px;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+body.cartoon-mode .feature-item__icon,
+body.cartoon-mode .download-item__icon {
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 100%
+  );
+  border: 2.5px solid rgba(0, 0, 0, 0.88);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.82);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.cartoon-mode .btn {
+  border-radius: var(--cartoon-radius-sm);
+  font-family: var(--cartoon-font);
+  font-weight: 500;
+  border: var(--cartoon-stroke) solid rgba(0, 0, 0, 0.88);
+  box-shadow: var(--cartoon-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.cartoon-mode .btn:hover {
+  transform: scale(0.97);
+}
+
+body.cartoon-mode .btn--primary {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 52%,
+    var(--cartoon-fill-low) 100%
+  );
+}
+
+body.cartoon-mode .btn--secondary {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--cartoon-fill-top) 0%,
+    var(--cartoon-fill-mid) 52%,
+    var(--cartoon-fill-low) 100%
+  );
+  border: var(--cartoon-stroke) solid rgba(0, 0, 0, 0.88);
+}
+
+body.cartoon-mode .display,
+body.cartoon-mode .display--sm {
+  font-family: var(--cartoon-font);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+body.cartoon-mode .eyebrow,
+body.cartoon-mode .license-meta dt {
+  color: #fff;
+  letter-spacing: 0.06em;
+}
+
+body.cartoon-mode .glass-card,
+body.cartoon-mode .platform-pill {
+  color: var(--tile-text);
+}
+
+body.cartoon-mode .install-guide__lead,
+body.cartoon-mode .lead {
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  body.cartoon-mode .topbar__inner {
+    width: min(100%, calc(100% - 28px));
+  }
+
+  body.cartoon-mode .tab {
+    font-size: 10px;
+    padding: 10px 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-title--bump {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-card::before,
+  .btn::before,
+  .feature-item__icon::before,
+  .download-item__icon::before,
+  .platform-pill::before {
+    animation: none;
+    background: linear-gradient(
+      135deg,
+      rgba(var(--glow-rgb), 0.45) 0%,
+      rgba(var(--glow-rgb), 0.12) 50%,
+      rgba(255, 255, 255, 0.08) 100%
+    );
   }
 }

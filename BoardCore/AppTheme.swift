@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-// MARK: - Liquid glass
+// MARK: - Liquid glass / styled surfaces
 
 struct LiquidGlassBackground: View {
     var accentStroke: Color
@@ -23,29 +23,12 @@ struct LiquidGlassBackground: View {
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(accentStroke.opacity(fillOpacity))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                accentStroke.opacity(0.9),
-                                accentStroke.opacity(0.35),
-                                Color.white.opacity(0.15),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
-            )
-            .shadow(color: accentStroke.opacity(0.22), radius: 14, y: 8)
-            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+        AppStyledSurfaceBackground(
+            accentStroke: accentStroke,
+            cornerRadius: cornerRadius,
+            fillOpacity: fillOpacity,
+            prominent: false
+        )
     }
 }
 
@@ -54,25 +37,11 @@ struct LiquidGlassProminentBackground: View {
     var cornerRadius: CGFloat = 12
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            accent.opacity(0.55),
-                            accent.opacity(0.22),
-                            accent.opacity(0.08),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            LiquidGlassBackground(
-                accentStroke: accent,
-                cornerRadius: cornerRadius,
-                fillOpacity: 0.28
-            )
-        }
+        AppStyledSurfaceBackground(
+            accentStroke: accent,
+            cornerRadius: cornerRadius,
+            prominent: true
+        )
     }
 }
 
@@ -88,48 +57,64 @@ private struct LiquidGlassButtonBackgroundModifier: ViewModifier {
     let cornerRadius: CGFloat
     let accent: Color?
 
-    private var resolvedAccent: Color { accent ?? settings.accentColor }
+    private var resolvedAccent: Color {
+        let base = accent ?? settings.accentColor
+        return settings.visualStyle.styledAccent(from: base)
+    }
+
+    private var resolvedRadius: CGFloat {
+        cornerRadius == 12 ? settings.visualStyle.metrics.buttonCornerRadius : cornerRadius
+    }
 
     func body(content: Content) -> some View {
         content
             .background {
-                if prominent {
-                    LiquidGlassProminentBackground(
-                        accent: resolvedAccent,
-                        cornerRadius: cornerRadius
-                    )
-                } else {
-                    LiquidGlassBackground(
-                        accentStroke: resolvedAccent,
-                        cornerRadius: cornerRadius,
-                        fillOpacity: 0.1
-                    )
-                }
+                AppStyledSurfaceBackground(
+                    accentStroke: resolvedAccent,
+                    cornerRadius: resolvedRadius,
+                    prominent: prominent
+                )
             }
     }
 }
 
-// MARK: - Style przycisków (liquid glass + kolor z AppSettings.accentColor)
+// MARK: - Style przycisków
 
 struct AppProminentButtonStyle: ButtonStyle {
     @Environment(AppSettings.self) private var settings
 
     func makeBody(configuration: Configuration) -> some View {
+        let metrics = settings.visualStyle.metrics
+        let accent = settings.visualStyle.styledAccent(from: settings.accentColor)
+
         configuration.label
-            .font(.headline)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .appCartoonTypography(textStyle: .headline)
+            .foregroundStyle(buttonForeground(prominent: true))
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
             .frame(maxWidth: .infinity)
             .background {
-                LiquidGlassProminentBackground(
-                    accent: settings.accentColor,
-                    cornerRadius: 12
+                AppStyledSurfaceBackground(
+                    accentStroke: accent,
+                    cornerRadius: metrics.buttonCornerRadius,
+                    prominent: true
                 )
                 .opacity(configuration.isPressed ? 0.88 : 1)
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? metrics.pressedScale : 1)
+            .animation(metrics.pressAnimation, value: configuration.isPressed)
+    }
+
+    private var horizontalPadding: CGFloat {
+        settings.visualStyle == .cartoon ? 18 : 16
+    }
+
+    private var verticalPadding: CGFloat {
+        settings.visualStyle == .cartoon ? 14 : 12
+    }
+
+    private func buttonForeground(prominent: Bool) -> Color {
+        .white
     }
 }
 
@@ -137,22 +122,30 @@ struct AppSecondaryButtonStyle: ButtonStyle {
     @Environment(AppSettings.self) private var settings
 
     func makeBody(configuration: Configuration) -> some View {
+        let metrics = settings.visualStyle.metrics
+        let accent = settings.visualStyle.styledAccent(from: settings.accentColor)
+
         configuration.label
-            .font(.headline)
-            .foregroundStyle(.white.opacity(0.95))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .appCartoonTypography(textStyle: .headline)
+            .foregroundStyle(buttonForeground)
+            .padding(.horizontal, settings.visualStyle == .cartoon ? 18 : 16)
+            .padding(.vertical, settings.visualStyle == .cartoon ? 14 : 12)
             .frame(maxWidth: .infinity)
             .background {
-                LiquidGlassBackground(
-                    accentStroke: settings.accentColor,
-                    cornerRadius: 12,
-                    fillOpacity: 0.12
+                AppStyledSurfaceBackground(
+                    accentStroke: accent,
+                    cornerRadius: metrics.buttonCornerRadius,
+                    fillOpacity: metrics.fillOpacity,
+                    prominent: false
                 )
                 .opacity(configuration.isPressed ? 0.88 : 1)
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? metrics.pressedScale : 1)
+            .animation(metrics.pressAnimation, value: configuration.isPressed)
+    }
+
+    private var buttonForeground: Color {
+        .white.opacity(0.95)
     }
 }
 
@@ -175,6 +168,6 @@ private struct DmdRootThemeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .tint(settings.accentColor)
+            .tint(settings.visualStyle.styledAccent(from: settings.accentColor))
     }
 }

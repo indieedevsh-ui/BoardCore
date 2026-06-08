@@ -218,7 +218,7 @@ struct CreatorStatsEditor: View {
                 }
             }
             .font(.subheadline)
-            Slider(
+            AppSlider(
                 value: Binding(
                     get: { Double(value.wrappedValue) },
                     set: { value.wrappedValue = Int($0.rounded()) }

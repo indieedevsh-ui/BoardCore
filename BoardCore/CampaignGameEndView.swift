@@ -16,8 +16,11 @@ struct CampaignGameEndView: View {
     @Environment(AppSettings.self) private var settings
 
     let campaignTitle: String
+    let winnerPlayerName: String?
+    let endSummary: String
     let financeRanking: [CampaignEndRankingRow]
     let abilityRanking: [CampaignEndRankingRow]
+    let bossFightRanking: [CampaignEndRankingRow]
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
@@ -28,9 +31,29 @@ struct CampaignGameEndView: View {
                     Text(campaignTitle)
                         .font(.title3)
                         .foregroundStyle(.secondary)
-                    Text("Kampania fabularna dobiegła końca. Oto podsumowanie drużyny.")
+                    Text(endSummary)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    if let winnerPlayerName {
+                        HStack(spacing: 10) {
+                            Image(systemName: "trophy.fill")
+                                .font(.title2)
+                                .foregroundStyle(.yellow)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Zwycięzca")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(winnerPlayerName)
+                                    .font(.title3.bold())
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            LiquidGlassBackground(accentStroke: .yellow, cornerRadius: 14)
+                        )
+                    }
                 }
 
                 rankingSection(
@@ -45,6 +68,13 @@ struct CampaignGameEndView: View {
                     icon: "sparkles",
                     tint: settings.accentColor,
                     rows: abilityRanking
+                )
+
+                rankingSection(
+                    title: "Najwięcej walk z bossem",
+                    icon: "shield.lefthalf.filled",
+                    tint: .orange,
+                    rows: bossFightRanking
                 )
             }
             .padding(.horizontal, 20)
@@ -106,17 +136,22 @@ struct CampaignGameEndView: View {
 enum CampaignEndRankings {
     static func financeRows(
         players: [PlayerCharacter],
-        stats: [UUID: PlayerRuntimeStats]
+        stats: [UUID: PlayerRuntimeStats],
+        itemValuesByPlayer: [UUID: Int]
     ) -> [CampaignEndRankingRow] {
         let sorted = players.sorted { lhs, rhs in
-            let left = stats[lhs.id]?.finances ?? 0
-            let right = stats[rhs.id]?.finances ?? 0
+            let left = totalFinances(playerID: lhs.id, stats: stats, itemValue: itemValuesByPlayer[lhs.id] ?? 0)
+            let right = totalFinances(playerID: rhs.id, stats: stats, itemValue: itemValuesByPlayer[rhs.id] ?? 0)
             if left != right { return left > right }
             return lhs.displayTitle < rhs.displayTitle
         }
         return placeRows(sorted: sorted) { player in
-            let value = stats[player.id]?.finances ?? 0
-            return "\(value) monet"
+            let cash = stats[player.id]?.finances ?? 0
+            let items = itemValuesByPlayer[player.id] ?? 0
+            if items > 0 {
+                return "\(cash + items) monet (gotówka \(cash) + przedmioty \(items))"
+            }
+            return "\(cash) monet"
         }
     }
 
@@ -142,6 +177,30 @@ enum CampaignEndRankings {
             }
             return "Pasek zdolności: \(stat)"
         }
+    }
+
+    static func bossFightRows(
+        players: [PlayerCharacter],
+        bossFightCounts: [UUID: Int]
+    ) -> [CampaignEndRankingRow] {
+        let sorted = players.sorted { lhs, rhs in
+            let left = bossFightCounts[lhs.id] ?? 0
+            let right = bossFightCounts[rhs.id] ?? 0
+            if left != right { return left > right }
+            return lhs.displayTitle < rhs.displayTitle
+        }
+        return placeRows(sorted: sorted) { player in
+            let count = bossFightCounts[player.id] ?? 0
+            return count == 1 ? "1 walka" : "\(count) walk"
+        }
+    }
+
+    private static func totalFinances(
+        playerID: UUID,
+        stats: [UUID: PlayerRuntimeStats],
+        itemValue: Int
+    ) -> Int {
+        (stats[playerID]?.finances ?? 0) + itemValue
     }
 
     private static func placeRows(

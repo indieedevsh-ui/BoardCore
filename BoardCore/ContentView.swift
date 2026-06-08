@@ -10,65 +10,27 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppSettings.self) private var settings
-    @State private var selectedTab = Tab.menu
+    @State private var selectedTab: AppRootTab = .menu
     @State private var menuNavigationDepth = 0
-
-    private enum Tab: Hashable {
-        case menu
-        case campaigns
-        case creator
-        case trikiController
-        case settings
-    }
+    @State private var cartoonTabBarVisible = true
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            MenuView(navigationDepth: $menuNavigationDepth)
-                .appTabRootScreen()
-                .tag(Tab.menu)
-                .tabItem {
-                    Label("Menu", systemImage: "house.fill")
-                }
-
-            if settings.effectiveCampaignsEnabled {
-                CampaignsHomeView()
-                    .appTabRootScreen()
-                    .tag(Tab.campaigns)
-                    .tabItem {
-                        Label("Kampanie", systemImage: "books.vertical.fill")
-                    }
+        Group {
+            if settings.visualStyle == .cartoon {
+                cartoonRootShell
+            } else {
+                elegantTabView
             }
-
-            if settings.developerModeEnabled {
-                CreatorHomeView()
-                    .appTabRootScreen()
-                    .tag(Tab.creator)
-                    .tabItem {
-                        Label("DevCentrum", systemImage: "wand.and.stars")
-                    }
-            }
-
-            TrikiControllerDebugView()
-                .appTabRootScreen()
-                .tag(Tab.trikiController)
-                .tabItem {
-                    Label("TRIKI KONTROLER", systemImage: "gamecontroller.fill")
-                }
-
-            SettingsView()
-                .appTabRootScreen()
-                .tag(Tab.settings)
-                .tabItem {
-                    Label("Ustawienia", systemImage: "gearshape.fill")
-                }
         }
-        .toolbarBackground(.hidden, for: .tabBar)
         .overlay { AppBackgroundSync() }
         .dmdRootTheme()
+        .appVisualStyleEnvironment()
+        .appStyledToggles()
         .trikiNavigationHost(isBlocked: isTrikiNavigationBlocked)
         .onAppear {
             AppAppearance.applyTransparentChrome()
-            AppAppearance.clearViewHierarchyBackgrounds()
+            AppAppearance.applyTabBarAppearance(for: settings.visualStyle)
+            AppAppearance.refreshViewHierarchyBackgrounds()
             BackgroundMusicPlayer.startLoopingIfNeeded(appVolume: settings.volume)
             ensureValidSelectedTab()
         }
@@ -78,15 +40,111 @@ struct ContentView: View {
         .onChange(of: settings.developerModeEnabled) { _, _ in
             ensureValidSelectedTab()
         }
+        .onChange(of: settings.trikiControllerEnabled) { _, _ in
+            ensureValidSelectedTab()
+        }
+        .onChange(of: settings.visualStyle) { _, _ in
+            ensureValidSelectedTab()
+        }
         .onChange(of: settings.volume) { _, newVolume in
             BackgroundMusicPlayer.updateVolume(newVolume)
         }
         .onChange(of: selectedTab) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            settings.playTapSound()
-            DispatchQueue.main.async {
-                AppAppearance.clearViewHierarchyBackgrounds()
+            if settings.visualStyle != .cartoon {
+                settings.playTapSound()
             }
+            DispatchQueue.main.async {
+                AppAppearance.refreshViewHierarchyBackgrounds()
+            }
+        }
+        .onPreferenceChange(AppCartoonTabBarVisibilityKey.self) { cartoonTabBarVisible = $0 }
+    }
+
+    private var elegantTabView: some View {
+        TabView(selection: $selectedTab) {
+            rootTabScreen(.menu)
+                .tag(AppRootTab.menu)
+                .tabItem {
+                    Label(AppRootTab.menu.title, systemImage: AppRootTab.menu.systemImage)
+                }
+
+            if settings.effectiveCampaignsEnabled {
+                rootTabScreen(.campaigns)
+                    .tag(AppRootTab.campaigns)
+                    .tabItem {
+                        Label(AppRootTab.campaigns.title, systemImage: AppRootTab.campaigns.systemImage)
+                    }
+            }
+
+            if settings.developerModeEnabled {
+                rootTabScreen(.creator)
+                    .tag(AppRootTab.creator)
+                    .tabItem {
+                        Label(AppRootTab.creator.title, systemImage: AppRootTab.creator.systemImage)
+                    }
+            }
+
+            if settings.trikiControllerEnabled {
+                rootTabScreen(.trikiController)
+                    .tag(AppRootTab.trikiController)
+                    .tabItem {
+                        Label(AppRootTab.trikiController.title, systemImage: AppRootTab.trikiController.systemImage)
+                    }
+            }
+
+            rootTabScreen(.settings)
+                .tag(AppRootTab.settings)
+                .tabItem {
+                    Label(AppRootTab.settings.title, systemImage: AppRootTab.settings.systemImage)
+                }
+        }
+        .appTabBarChrome()
+    }
+
+    private var cartoonRootShell: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                ForEach(visibleRootTabs, id: \.self) { tab in
+                    rootTabScreen(tab)
+                        .opacity(selectedTab == tab ? 1 : 0)
+                        .allowsHitTesting(selectedTab == tab)
+                        .accessibilityHidden(selectedTab != tab)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if cartoonTabBarVisible {
+                CartoonBottomTabBar(
+                    selectedTab: $selectedTab,
+                    tabs: visibleRootTabs
+                )
+            }
+        }
+    }
+
+    private var visibleRootTabs: [AppRootTab] {
+        AppRootTab.visibleTabs(for: settings)
+    }
+
+    @ViewBuilder
+    private func rootTabScreen(_ tab: AppRootTab) -> some View {
+        switch tab {
+        case .menu:
+            MenuView(navigationDepth: $menuNavigationDepth)
+                .appTabRootScreen()
+        case .campaigns:
+            CampaignsHomeView()
+                .appTabRootScreen()
+        case .creator:
+            CreatorHomeView()
+                .appTabRootScreen()
+        case .trikiController:
+            TrikiControllerDebugView()
+                .appTabRootScreen()
+        case .settings:
+            SettingsView()
+                .appTabRootScreen()
         }
     }
 
@@ -102,10 +160,8 @@ struct ContentView: View {
     }
 
     private func ensureValidSelectedTab() {
-        if !settings.effectiveCampaignsEnabled, selectedTab == .campaigns {
-            selectedTab = .menu
-        }
-        if !settings.developerModeEnabled, selectedTab == .creator {
+        let visible = Set(visibleRootTabs)
+        if !visible.contains(selectedTab) {
             selectedTab = .menu
         }
     }

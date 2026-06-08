@@ -21,6 +21,7 @@ final class AppSettings {
     private static let developerModeEnabledKey = "developerModeEnabled"
     private static let trikiControllerEnabledKey = "trikiControllerEnabled"
     private static let trikiControllerCalibratedKey = "trikiControllerCalibrated"
+    private static let visualStyleKey = "appVisualStyle"
 
     static let defaultBackgroundRed = 0.95
     static let defaultBackgroundGreen = 0.97
@@ -82,6 +83,14 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(trikiControllerCalibrated, forKey: Self.trikiControllerCalibratedKey) }
     }
 
+    /// Wygląd interfejsu: elegancki lub kreskówkowy.
+    var visualStyle: AppVisualStyle {
+        didSet {
+            UserDefaults.standard.set(visualStyle.rawValue, forKey: Self.visualStyleKey)
+            AppAppearance.applyTabBarAppearance(for: visualStyle)
+        }
+    }
+
     /// Kampanie można włączyć tylko na urządzeniach z więcej niż 5 GB RAM.
     var canEnableCampaigns: Bool {
         !DeviceMemory.blocksCampaignsDueToLowRAM
@@ -98,14 +107,14 @@ final class AppSettings {
 
     /// Jaśniejszy odcień poświaty — używany przez przyciski i akcenty UI.
     var accentColor: Color {
-        Self.buttonTint(fromGlow: backgroundColor)
+        visualStyle.styledAccent(from: backgroundColor)
     }
 
     var backgroundColorKey: String {
         "\(backgroundRed)-\(backgroundGreen)-\(backgroundBlue)-\(backgroundOpacity)"
     }
 
-    var accentColorKey: String { backgroundColorKey }
+    var accentColorKey: String { "\(backgroundColorKey)-\(visualStyle.rawValue)" }
 
     init() {
         let defaults = UserDefaults.standard
@@ -134,6 +143,19 @@ final class AppSettings {
         developerModeEnabled = defaults.bool(forKey: Self.developerModeEnabledKey)
         trikiControllerEnabled = defaults.bool(forKey: Self.trikiControllerEnabledKey)
         trikiControllerCalibrated = defaults.bool(forKey: Self.trikiControllerCalibratedKey)
+        if let raw = defaults.string(forKey: Self.visualStyleKey) {
+            if raw == "fantasy" {
+                visualStyle = .elegant
+                defaults.set(AppVisualStyle.elegant.rawValue, forKey: Self.visualStyleKey)
+            } else if let style = AppVisualStyle(rawValue: raw) {
+                visualStyle = style
+            } else {
+                visualStyle = .elegant
+            }
+        } else {
+            visualStyle = .elegant
+        }
+        AppAppearance.applyTabBarAppearance(for: visualStyle)
     }
 
     func resetToDefaults() {
@@ -148,6 +170,7 @@ final class AppSettings {
         developerModeEnabled = false
         trikiControllerEnabled = false
         trikiControllerCalibrated = false
+        visualStyle = .elegant
     }
 
     private func color(red: Double, green: Double, blue: Double, opacity: Double) -> Color {

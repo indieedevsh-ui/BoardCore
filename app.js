@@ -100,9 +100,88 @@ function wireButtonSounds() {
   });
 }
 
+async function triggerFileDownload(url, filename) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Download failed");
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.rel = "noopener";
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.rel = "noopener";
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+}
+
+function wireFileDownloads() {
+  document.querySelectorAll("[data-file-download]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      const url = el.getAttribute("href");
+      const filename = el.dataset.fileName || url.split("/").pop();
+      if (!url || !filename) return;
+      triggerFileDownload(url, filename);
+    });
+  });
+}
+
+const WELCOME_CLICKS_TO_TOGGLE = 3;
+
+function bumpWelcomeTitle(title) {
+  title.classList.remove("welcome-title--bump");
+  void title.offsetWidth;
+  title.classList.add("welcome-title--bump");
+}
+
+function wireWelcomeEasterEgg() {
+  const title = document.getElementById("welcome-title");
+  if (!title) return;
+
+  let clickCount = 0;
+
+  const handleActivate = () => {
+    playClickSound("soft");
+    bumpWelcomeTitle(title);
+    clickCount += 1;
+
+    if (clickCount >= WELCOME_CLICKS_TO_TOGGLE) {
+      clickCount = 0;
+      document.body.classList.toggle("cartoon-mode");
+    }
+  };
+
+  title.addEventListener("click", handleActivate);
+  title.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    handleActivate();
+  });
+  title.addEventListener("animationend", (event) => {
+    if (event.animationName === "welcome-bump") {
+      title.classList.remove("welcome-title--bump");
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   wireTabs();
   wireShortcuts();
   wireButtonSounds();
+  wireFileDownloads();
+  wireWelcomeEasterEgg();
   setActiveView(getRouteFromHash());
 });

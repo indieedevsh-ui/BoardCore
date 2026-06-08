@@ -42,6 +42,12 @@ struct SavedGameSnapshot: Codable {
     var playerQueueBlockRounds: [String: Int] = [:]
     var isBossFightActive: Bool = false
     var campaignStoryFinished: Bool = false
+    var pendingFinalTurn: Bool = false
+    var finalTurnEndAfterPlayerIndex: Int = 0
+    var finalTurnRoundActive: Bool = false
+    var sessionAbilityGoalReachedOrder: [String] = []
+    var sessionWinnerPlayerID: String?
+    var sessionEndPhase: String = SessionEndPhase.none.rawValue
     var sessionAbilityPool: GameplaySessionAbilityPoolState?
     var playerBoardPositions: [String: Int] = [:]
     var activeTurnDamageEffects: [ActiveTurnDamageEffect] = []

@@ -111,6 +111,7 @@ struct GameView: View {
         .background(Color.clear)
         .appThemedScreen()
         .toolbar(playerAddedOverlayName != nil ? .hidden : .visible, for: .tabBar)
+        .appCartoonTabBarVisible(playerAddedOverlayName == nil && characterSetupSlot == nil)
         .trikiFocusContext(
             id: lobbyTrikiFocusID,
             buttons: lobbyTrikiButtons,
@@ -385,6 +386,15 @@ struct GameInProgressView: View {
     @State private var artifactDrawSession: ArtifactDrawSession?
     @State private var shopPhase: ShopOverlayPhase = .hidden
     @State private var shopStockItems: [CreatedItem] = []
+    @State private var xpShopPhase: XPShopOverlayPhase = .hidden
+    @State private var pendingXpShopRoll: XPShopPendingRoll?
+    @State private var pendingFinalTurn = false
+    @State private var finalTurnEndAfterPlayerIndex = 0
+    @State private var finalTurnRoundActive = false
+    @State private var showFinalTurnIntro = false
+    @State private var sessionAbilityGoalReachedOrder: [UUID] = []
+    @State private var sessionWinnerPlayerID: UUID?
+    @State private var sessionEndPhase: SessionEndPhase = .none
     @State private var pendingPassChoiceText = ""
     @State private var startFieldStayTurnPending = false
     @State private var playerGrantedAbilityIDs: [UUID: [UUID]] = [:]
@@ -434,6 +444,16 @@ struct GameInProgressView: View {
     private enum FinancesAnimationPolicy {
         case automatic
         case suppressed
+    }
+
+    private enum XPShopCost {
+        static let fiftyFifty = 80
+        static let randomAbility = 250
+    }
+
+    private enum XPShopPendingRoll: Equatable {
+        case fiftyFifty(XPShopFiftyFiftyRoll)
+        case randomAbility(XPShopRandomAbilityRoll)
     }
 
     private enum PowerPathPendingAction: Equatable {
@@ -612,11 +632,28 @@ struct GameInProgressView: View {
                 initialValue: Self.queueBlockMap(from: snapshot.playerQueueBlockRounds)
             )
             _isBossFightActive = State(initialValue: snapshot.isBossFightActive)
-            _campaignStoryFinished = State(
-                initialValue: campaignsEnabled && snapshot.campaignStoryFinished
+            _campaignStoryFinished = State(initialValue: snapshot.campaignStoryFinished)
+            _pendingFinalTurn = State(initialValue: snapshot.pendingFinalTurn)
+            _finalTurnEndAfterPlayerIndex = State(initialValue: snapshot.finalTurnEndAfterPlayerIndex)
+            _finalTurnRoundActive = State(initialValue: snapshot.finalTurnRoundActive)
+            _showFinalTurnIntro = State(initialValue: false)
+            _sessionAbilityGoalReachedOrder = State(
+                initialValue: snapshot.sessionAbilityGoalReachedOrder.compactMap(UUID.init(uuidString:))
+            )
+            _sessionWinnerPlayerID = State(
+                initialValue: snapshot.sessionWinnerPlayerID.flatMap(UUID.init(uuidString:))
+            )
+            _sessionEndPhase = State(
+                initialValue: {
+                    let phase = SessionEndPhase(rawValue: snapshot.sessionEndPhase) ?? .none
+                    if snapshot.campaignStoryFinished, phase == .none {
+                        return .rankings
+                    }
+                    return phase
+                }()
             )
             _inGameScreen = State(
-                initialValue: campaignsEnabled && snapshot.campaignStoryFinished ? .campaignEnd : .gameplay
+                initialValue: snapshot.campaignStoryFinished ? .campaignEnd : .gameplay
             )
             _sessionAbilityPool = State(
                 initialValue: snapshot.sessionAbilityPool
@@ -887,6 +924,28 @@ struct GameInProgressView: View {
         shopPhase != .hidden
     }
 
+    private var isXpShopOverlayVisible: Bool {
+        xpShopPhase != .hidden
+    }
+
+    private var isXpShopDrawing: Bool {
+        switch xpShopPhase {
+        case .drawingFiftyFifty, .drawingRandomAbility:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isXpShopResultReady: Bool {
+        switch xpShopPhase {
+        case .revealedFiftyFifty, .revealedRandomAbility:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var passiveQRMonitorEnabled: Bool {
         inGameScreen == .gameplay
             && !campaignStoryFinished
@@ -904,6 +963,11 @@ struct GameInProgressView: View {
         if isShopOverlayVisible {
             return shopTrikiButtons
         }
+        if isXpShopOverlayVisible {
+            if isXpShopDrawing { return [] }
+            if isXpShopResultReady { return [.overlayContinue] }
+            return [.overlayContinue]
+        }
         if showPlayerStatsOverlay {
             return [.statsExit]
         }
@@ -915,6 +979,9 @@ struct GameInProgressView: View {
         }
         if isPowerPathOverlayVisible {
             return powerPathTrikiButtons
+        }
+        if showFinalTurnIntro {
+            return []
         }
         if pendingEventIntro != nil {
             return [.overlayContinue]
@@ -1109,10 +1176,12 @@ struct GameInProgressView: View {
             || isSkipTurnOverlayVisible
             || isTurnChangeOverlayVisible
             || isEventIntroVisible
+            || showFinalTurnIntro
             || isSpecialCardDrawVisible
             || isArtifactDrawVisible
             || isQueueBlockedOverlayVisible
             || isShopOverlayVisible
+            || isXpShopOverlayVisible
             || !fallenPlayerQueue.isEmpty
             || bossVictoryPresentation != nil
             || isPowerPathOverlayVisible
@@ -1441,14 +1510,93 @@ struct GameInProgressView: View {
     }
 
     private func checkSessionWinCondition() {
-        guard campaignsEnabled, !campaignStoryFinished else { return }
+        guard !campaignStoryFinished else { return }
+        let goal = GameplaySessionAbilityPoolState.poolSize
+        var beganFinalTurn = false
+
         for player in players {
             let count = playerGrantedAbilityIDs[player.id]?.count ?? 0
-            if count >= 10 {
-                markCampaignStoryFinished()
-                return
-            }
+            guard count >= goal else { continue }
+
+            recordSessionAbilityGoalReached(by: player.id)
+            guard !pendingFinalTurn else { continue }
+
+            pendingFinalTurn = true
+            finalTurnEndAfterPlayerIndex = players.firstIndex(where: { $0.id == player.id })
+                ?? turnState.currentPlayerIndex
+            showFinalTurnIntro = true
+            beganFinalTurn = true
+            turnState.logCustomEvent(
+                playerName: player.className,
+                message: "\(player.displayTitle) zebrał \(goal) zdolności — ostatnia tura dla wszystkich graczy.",
+                turnMessage: "Ostatnia tura do zakończenia rozgrywki."
+            )
         }
+
+        if beganFinalTurn {
+            syncGameplayQRScanningState()
+        }
+    }
+
+    @discardableResult
+    private func recordSessionAbilityGoalReached(by playerID: UUID) -> Bool {
+        guard !sessionAbilityGoalReachedOrder.contains(playerID) else { return false }
+        sessionAbilityGoalReachedOrder.append(playerID)
+        return true
+    }
+
+    private func resolveSessionWinner() {
+        let goal = GameplaySessionAbilityPoolState.poolSize
+        let contenders = players.filter { player in
+            (playerGrantedAbilityIDs[player.id]?.count ?? 0) >= goal
+        }
+
+        if let winner = SessionWinnerResolver.pickWinner(
+            from: contenders.isEmpty
+                ? players.filter { sessionAbilityGoalReachedOrder.contains($0.id) }
+                : contenders,
+            stats: playerStats,
+            itemValuesByPlayer: ownedItemValueTotalsByPlayer,
+            bossFightCounts: playerBossFightCounts,
+            firstToGoalOrder: sessionAbilityGoalReachedOrder
+        ) {
+            sessionWinnerPlayerID = winner.id
+        } else if let firstID = sessionAbilityGoalReachedOrder.first {
+            sessionWinnerPlayerID = firstID
+        }
+    }
+
+    private var sessionWinnerRevealDetail: String {
+        let goal = GameplaySessionAbilityPoolState.poolSize
+        let contenders = players.filter { (playerGrantedAbilityIDs[$0.id]?.count ?? 0) >= goal }
+        if contenders.count <= 1 {
+            return "Pierwszy gracz, który osiągnął \(goal) na \(goal) zdolności."
+        }
+        return "Wyłoniony po porównaniu: finanse (z przedmiotami), walki z bossem i siła."
+    }
+
+    private func shouldCompleteSessionAfterFinalRound() -> Bool {
+        guard pendingFinalTurn, finalTurnRoundActive else { return false }
+        return turnState.currentPlayerIndex == finalTurnEndAfterPlayerIndex
+    }
+
+    private func completeSessionGame() {
+        pendingFinalTurn = false
+        finalTurnRoundActive = false
+        showFinalTurnIntro = false
+        resolveSessionWinner()
+        markSessionGameOver(showWinnerReveal: sessionWinnerPlayerID != nil)
+    }
+
+    private func finishFinalTurnIntro() {
+        showFinalTurnIntro = false
+        finalTurnRoundActive = true
+        syncGameplayQRScanningState()
+    }
+
+    private func finishSessionWinnerReveal() {
+        sessionEndPhase = .rankings
+        settings.playStatsRevealSound()
     }
 
     private func finalizePlayerElimination(id: UUID) {
@@ -1539,8 +1687,26 @@ struct GameInProgressView: View {
         )
     }
 
+    private var ownedItemValueTotalsByPlayer: [UUID: Int] {
+        var totals: [UUID: Int] = [:]
+        for player in players {
+            let itemIDs = playerGrantedItemIDs[player.id] ?? []
+            totals[player.id] = itemIDs.reduce(0) { partial, itemID in
+                guard let item = creatorStore.catalog.items.first(where: { $0.id == itemID }) else {
+                    return partial
+                }
+                return partial + effectiveItemValue(item, for: player.id)
+            }
+        }
+        return totals
+    }
+
     private var financeEndRanking: [CampaignEndRankingRow] {
-        CampaignEndRankings.financeRows(players: players, stats: playerStats)
+        CampaignEndRankings.financeRows(
+            players: players,
+            stats: playerStats,
+            itemValuesByPlayer: ownedItemValueTotalsByPlayer
+        )
     }
 
     private var abilityEndRanking: [CampaignEndRankingRow] {
@@ -1549,6 +1715,33 @@ struct GameInProgressView: View {
             stats: playerStats,
             grantedAbilityIDs: playerGrantedAbilityIDs
         )
+    }
+
+    private var bossFightEndRanking: [CampaignEndRankingRow] {
+        CampaignEndRankings.bossFightRows(
+            players: players,
+            bossFightCounts: playerBossFightCounts
+        )
+    }
+
+    private var campaignEndWinnerName: String? {
+        guard let sessionWinnerPlayerID,
+              let winner = players.first(where: { $0.id == sessionWinnerPlayerID }) else {
+            return nil
+        }
+        return winner.displayTitle
+    }
+
+    private var campaignEndSummary: String {
+        if sessionWinnerPlayerID != nil {
+            let goal = GameplaySessionAbilityPoolState.poolSize
+            let contenders = players.filter { (playerGrantedAbilityIDs[$0.id]?.count ?? 0) >= goal }
+            if contenders.count > 1 {
+                return "Kilku graczy osiągnęło \(goal) zdolności — zwycięzcę wyłoniono po statystykach. Fundusze uwzględniają wartość przedmiotów."
+            }
+            return "Cel gry: \(goal) zdolności. Poniżej ranking drużyny — fundusze uwzględniają wartość przedmiotów."
+        }
+        return "Kampania fabularna dobiegła końca. Oto podsumowanie drużyny — fundusze uwzględniają wartość przedmiotów."
     }
 
     var body: some View {
@@ -1587,8 +1780,9 @@ struct GameInProgressView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(isFullScreenOverlayVisible ? .hidden : .visible, for: .navigationBar)
             .toolbar(isFullScreenOverlayVisible ? .hidden : .visible, for: .tabBar)
+            .appCartoonTabBarVisible(!isFullScreenOverlayVisible)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if campaignsEnabled, campaignStoryFinished, fallenPlayerQueue.isEmpty {
+                if campaignStoryFinished, fallenPlayerQueue.isEmpty {
                     campaignFinishedBottomBar
                 }
             }
@@ -1711,6 +1905,9 @@ struct GameInProgressView: View {
                 }
             }
             .onChange(of: shopPhase) { _, _ in
+                reconcileTrikiSelection(resetToFirst: true)
+            }
+            .onChange(of: xpShopPhase) { _, _ in
                 reconcileTrikiSelection(resetToFirst: true)
             }
             .onChange(of: showPlayerStatsOverlay) { _, _ in
@@ -1844,25 +2041,45 @@ struct GameInProgressView: View {
         }
 
         Group {
-            if campaignsEnabled, inGameScreen == .campaignEnd {
+            if campaignStoryFinished, sessionEndPhase == .winnerReveal, let winnerName = campaignEndWinnerName {
+                SessionWinnerRevealOverlay(
+                    playerGlow: turnGlowColor,
+                    winnerName: winnerName,
+                    detail: sessionWinnerRevealDetail,
+                    onComplete: finishSessionWinnerReveal
+                )
+            } else if campaignStoryFinished, inGameScreen == .campaignEnd {
                 CampaignGameEndView(
                     campaignTitle: campaign.title,
+                    winnerPlayerName: campaignEndWinnerName,
+                    endSummary: campaignEndSummary,
                     financeRanking: financeEndRanking,
-                    abilityRanking: abilityEndRanking
+                    abilityRanking: abilityEndRanking,
+                    bossFightRanking: bossFightEndRanking
                 )
             } else {
                 mainGameContent
             }
         }
-        .opacity(isStartFieldOverlayVisible || isShopOverlayVisible ? 0 : 1)
+        .opacity(isStartFieldOverlayVisible || isShopOverlayVisible || isXpShopOverlayVisible ? 0 : 1)
         .allowsHitTesting(!isFullScreenOverlayVisible)
         .animation(.easeInOut(duration: 0.45), value: isStartFieldOverlayVisible)
         .animation(.easeInOut(duration: 0.45), value: isShopOverlayVisible)
+        .animation(.easeInOut(duration: 0.45), value: isXpShopOverlayVisible)
         .animation(.easeInOut(duration: 0.35), value: inGameScreen)
     }
 
     @ViewBuilder
     private var gameplayEventOverlayLayer: some View {
+        if showFinalTurnIntro {
+            SessionFinalTurnIntroOverlay(
+                playerGlow: turnGlowColor,
+                onComplete: finishFinalTurnIntro
+            )
+            .zIndex(95)
+            .transition(.opacity)
+        }
+
         if let pendingEventIntro {
             GameEventIntroOverlay(
                 playerGlow: turnGlowColor,
@@ -1898,6 +2115,24 @@ struct GameInProgressView: View {
             trikiPairingOverlay
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 .zIndex(120)
+        }
+
+        if isXpShopOverlayVisible, let activePlayer {
+            let xp = PowerPathEngine.progress(for: activePlayer.id, in: playerPowerPathProgress).experiencePoints
+            XPShopFullScreenOverlay(
+                playerGlow: turnGlowColor,
+                phase: xpShopPhase,
+                playerName: activePlayer.displayTitle,
+                experiencePoints: xp,
+                fiftyFiftyCost: XPShopCost.fiftyFifty,
+                randomAbilityCost: XPShopCost.randomAbility,
+                shuffleAbilities: sessionAbilityPool.abilities,
+                onFiftyFifty: { purchaseXpShopFiftyFifty(for: activePlayer) },
+                onBuyRandomAbility: { purchaseXpShopRandomAbility(for: activePlayer) },
+                onDrawRevealed: { completeXpShopDraw(for: activePlayer) },
+                onExit: { finishXpShop() },
+                trikiHighlightIndex: trikiHighlightIndexInContext
+            )
         }
 
         if isShopOverlayVisible, let activePlayer, let stats = activeStats {
@@ -2455,7 +2690,11 @@ struct GameInProgressView: View {
         )
         let mainPercentLabel = outcome.supporterIDs.isEmpty ? "100%" : "80%"
         let supporterPercentLabel = "20%"
-        let bossXP = bossVictoryXP(for: outcome.bossDifficulty)
+        let totalXP = bossVictoryXP(for: outcome.bossDifficulty)
+        let xpSplit = BossFightStatsCalculator.experienceRewardSplit(
+            totalPool: totalXP,
+            supporterCount: outcome.supporterIDs.count
+        )
 
         var steps: [BossFightVictoryRewardStep] = []
 
@@ -2473,7 +2712,7 @@ struct GameInProgressView: View {
                     rewardAmount: split.mainShare,
                     rewardPercentLabel: mainPercentLabel,
                     xpBefore: PowerPathEngine.progress(for: main.id, in: playerPowerPathProgress).experiencePoints,
-                    rewardXP: bossXP
+                    rewardXP: outcome.supporterIDs.isEmpty ? totalXP : xpSplit.mainShare
                 )
             )
         }
@@ -2493,7 +2732,7 @@ struct GameInProgressView: View {
                     rewardAmount: split.supporterShare,
                     rewardPercentLabel: supporterPercentLabel,
                     xpBefore: PowerPathEngine.progress(for: player.id, in: playerPowerPathProgress).experiencePoints,
-                    rewardXP: bossXP
+                    rewardXP: xpSplit.supporterShare
                 )
             )
         }
@@ -2523,22 +2762,44 @@ struct GameInProgressView: View {
             offerPostFightHealingIfNeeded(for: outcome.mainPlayerID)
         }
 
-        let participantIDs = [outcome.mainPlayerID] + outcome.supporterIDs
-        let bossXP = bossVictoryXP(for: outcome.bossDifficulty)
-        for participantID in participantIDs {
+        let totalXP = bossVictoryXP(for: outcome.bossDifficulty)
+        let xpSplit = BossFightStatsCalculator.experienceRewardSplit(
+            totalPool: totalXP,
+            supporterCount: outcome.supporterIDs.count
+        )
+
+        if presentationSteps.isEmpty {
             _ = PowerPathEngine.grantExperience(
-                bossXP,
-                playerID: participantID,
+                outcome.supporterIDs.isEmpty ? totalXP : xpSplit.mainShare,
+                playerID: outcome.mainPlayerID,
                 progress: &playerPowerPathProgress
             )
+            for supporterID in outcome.supporterIDs {
+                _ = PowerPathEngine.grantExperience(
+                    xpSplit.supporterShare,
+                    playerID: supporterID,
+                    progress: &playerPowerPathProgress
+                )
+            }
+        } else {
+            for step in presentationSteps where step.rewardXP > 0 {
+                _ = PowerPathEngine.grantExperience(
+                    step.rewardXP,
+                    playerID: step.playerID,
+                    progress: &playerPowerPathProgress
+                )
+            }
         }
 
         let mainShare = presentationSteps.first { $0.playerID == outcome.mainPlayerID }?.rewardAmount ?? 0
         let supporterShare = presentationSteps.first { $0.playerID != outcome.mainPlayerID }?.rewardAmount ?? 0
+        let mainXP = presentationSteps.first { $0.playerID == outcome.mainPlayerID }?.rewardXP
+            ?? (outcome.supporterIDs.isEmpty ? totalXP : xpSplit.mainShare)
+        let supporterXP = presentationSteps.first { $0.playerID != outcome.mainPlayerID }?.rewardXP
+            ?? xpSplit.supporterShare
         var rewardMessage = outcome.supporterIDs.isEmpty
-            ? "Wygrana z bossem! Nagroda: \(mainShare) monet."
-            : "Wygrana z bossem! Nagroda: \(mainShare) monet (główny) + \(supporterShare) za wsparcie."
-        rewardMessage += " Każdy uczestnik: +\(bossXP) XP."
+            ? "Wygrana z bossem! Nagroda: \(mainShare) monet, +\(mainXP) XP."
+            : "Wygrana z bossem! \(mainShare) monet i +\(mainXP) XP (gospodarz), \(supporterShare) monet i +\(supporterXP) XP (uczestnik)."
 
         turnState.logCustomEvent(
             playerName: players.first { $0.id == outcome.mainPlayerID }?.className ?? "Gracz",
@@ -2619,6 +2880,12 @@ struct GameInProgressView: View {
             ),
             isBossFightActive: isBossFightActive,
             campaignStoryFinished: campaignStoryFinished,
+            pendingFinalTurn: pendingFinalTurn,
+            finalTurnEndAfterPlayerIndex: finalTurnEndAfterPlayerIndex,
+            finalTurnRoundActive: finalTurnRoundActive,
+            sessionAbilityGoalReachedOrder: sessionAbilityGoalReachedOrder.map(\.uuidString),
+            sessionWinnerPlayerID: sessionWinnerPlayerID?.uuidString,
+            sessionEndPhase: sessionEndPhase.rawValue,
             sessionAbilityPool: sessionAbilityPool,
             playerBoardPositions: Dictionary(
                 uniqueKeysWithValues: playerBoardPositions.map { ($0.key.uuidString, $0.value) }
@@ -2890,7 +3157,7 @@ struct GameInProgressView: View {
             setPlayerStats(stats, for: activePlayer.id)
             let financesAfter = playerStats[activePlayer.id]?.finances ?? stats.finances
             let xpGained = PowerPathEngine.grantExperience(
-                PowerPathXPReward.startFieldStayFullHealth,
+                StartFieldRewards.stayAtFullHealthXP,
                 playerID: activePlayer.id,
                 progress: &playerPowerPathProgress
             )
@@ -3100,7 +3367,11 @@ struct GameInProgressView: View {
             trikiCoordinator.statusMessage = "Wciśnięto: \(labels[index])."
         case .overlayContinue:
             settings.playTapSound()
-            if pendingEventIntro != nil {
+            if isXpShopOverlayVisible, isXpShopResultReady {
+                finishXpShop()
+            } else if isXpShopOverlayVisible, case .menu = xpShopPhase {
+                finishXpShop()
+            } else if pendingEventIntro != nil {
                 finishEventIntro()
             } else if isSkipTurnOverlayVisible {
                 finishSkipTurnOverlay()
@@ -3233,6 +3504,8 @@ struct GameInProgressView: View {
             return specialCardDrawSession != nil && specialCardDrawRevealed
         case .shop:
             return shopPhase != .hidden
+        case .xpShop:
+            return isXpShopResultReady
         case .bossFight:
             return showBossFightAR
         case .arenaPvP:
@@ -3257,6 +3530,8 @@ struct GameInProgressView: View {
             finishSpecialCardDraw()
         case .shop:
             finishShop()
+        case .xpShop:
+            finishXpShop()
         case .bossFight:
             showBossFightAR = false
         case .arenaPvP:
@@ -3279,6 +3554,8 @@ struct GameInProgressView: View {
             return showArenaPvPAR
         case .shop:
             return shopPhase != .hidden
+        case .xpShop:
+            return xpShopPhase != .hidden
         case .specialCard:
             return specialCardDrawSession != nil
         }
@@ -3300,6 +3577,11 @@ struct GameInProgressView: View {
 
         if event == .shop {
             beginShop()
+            return
+        }
+
+        if event == .xpShop {
+            beginXpShop()
             return
         }
 
@@ -3337,6 +3619,246 @@ struct GameInProgressView: View {
         )
         advanceTurnWithReveal()
         recommendations = [:]
+    }
+
+    private func beginXpShop() {
+        guard activePlayer != nil else { return }
+        xpShopPhase = .menu
+        settings.playShopOpenSound()
+    }
+
+    private func finishXpShop() {
+        guard let activePlayer else {
+            xpShopPhase = .hidden
+            pendingXpShopRoll = nil
+            return
+        }
+
+        switch xpShopPhase {
+        case .menu, .revealedFiftyFifty, .revealedRandomAbility:
+            break
+        default:
+            return
+        }
+
+        xpShopPhase = .hidden
+        pendingXpShopRoll = nil
+        lastEventResult = .xpShop
+        lastSpecialCardDetail = ""
+        startFieldPhase = .hidden
+
+        turnState.logCustomEvent(
+            playerName: activePlayer.className,
+            message: "Odwiedził Sklepik XP.",
+            turnMessage: "Gracz \(turnState.currentPlayerNumber) (\(activePlayer.className)) — Sklepik XP."
+        )
+        advanceTurnWithReveal()
+        recommendations = [:]
+    }
+
+    private func purchaseXpShopFiftyFifty(for player: PlayerCharacter) {
+        guard xpShopPhase == .menu else { return }
+        guard PowerPathEngine.spendExperience(
+            XPShopCost.fiftyFifty,
+            playerID: player.id,
+            progress: &playerPowerPathProgress
+        ) else { return }
+
+        settings.playShopPurchaseSound()
+        let roll = resolveXpShopFiftyFiftyRoll(for: player)
+        pendingXpShopRoll = .fiftyFifty(roll)
+        xpShopPhase = .drawingFiftyFifty(roll)
+    }
+
+    private func purchaseXpShopRandomAbility(for player: PlayerCharacter) {
+        guard xpShopPhase == .menu else { return }
+        guard PowerPathEngine.spendExperience(
+            XPShopCost.randomAbility,
+            playerID: player.id,
+            progress: &playerPowerPathProgress
+        ) else { return }
+
+        settings.playShopPurchaseSound()
+        let roll = resolveXpShopRandomAbilityRoll(for: player)
+        pendingXpShopRoll = .randomAbility(roll)
+        xpShopPhase = .drawingRandomAbility(roll)
+    }
+
+    private func completeXpShopDraw(for player: PlayerCharacter) {
+        guard let pending = pendingXpShopRoll else { return }
+
+        let message: String
+        let logPrefix: String
+        switch pending {
+        case .fiftyFifty(let roll):
+            message = applyXpShopFiftyFiftyRoll(roll, to: player)
+            logPrefix = "Sklepik XP — 50 na 50"
+        case .randomAbility(let roll):
+            message = applyXpShopRandomAbilityRoll(roll, to: player)
+            logPrefix = "Sklepik XP — losowa zdolność"
+        }
+
+        pendingXpShopRoll = nil
+        switch pending {
+        case .fiftyFifty(let roll):
+            xpShopPhase = .revealedFiftyFifty(roll)
+        case .randomAbility(let roll):
+            xpShopPhase = .revealedRandomAbility(roll)
+        }
+        turnState.logCustomEvent(
+            playerName: player.className,
+            message: "\(logPrefix): \(message)"
+        )
+    }
+
+    private func resolveXpShopFiftyFiftyRoll(for player: PlayerCharacter) -> XPShopFiftyFiftyRoll {
+        if Bool.random() {
+            if let ability = sessionAbilityPool.peekRandom(for: player.id) {
+                return XPShopFiftyFiftyRoll(kind: .ability(ability))
+            }
+            return XPShopFiftyFiftyRoll(kind: .emptyAbilityPool)
+        }
+        let unlucky = XPShopUnluckyKind.allCases.randomElement() ?? .halveFinances
+        return XPShopFiftyFiftyRoll(kind: .unlucky(unlucky))
+    }
+
+    private func resolveXpShopRandomAbilityRoll(for player: PlayerCharacter) -> XPShopRandomAbilityRoll {
+        if let ability = sessionAbilityPool.peekRandom(for: player.id) {
+            return XPShopRandomAbilityRoll(kind: .ability(ability))
+        }
+        return XPShopRandomAbilityRoll(kind: .emptyPool)
+    }
+
+    private func applyXpShopFiftyFiftyRoll(_ roll: XPShopFiftyFiftyRoll, to player: PlayerCharacter) -> String {
+        switch roll.kind {
+        case .ability(let ability):
+            if grantSessionAbility(ability, to: player) != nil {
+                return "Szczęście! Zdobyto zdolność: \(ability.name)."
+            }
+            return "Szczęście, ale pula zdolności jest już wyczerpana."
+        case .emptyAbilityPool:
+            return "Szczęście, ale pula zdolności jest już wyczerpana."
+        case .unlucky(let kind):
+            return applyXpShopUnluckyOutcome(kind, to: player)
+        }
+    }
+
+    private func applyXpShopRandomAbilityRoll(_ roll: XPShopRandomAbilityRoll, to player: PlayerCharacter) -> String {
+        switch roll.kind {
+        case .ability(let ability):
+            if grantSessionAbility(ability, to: player) != nil {
+                return "Kupiono losową zdolność: \(ability.name)."
+            }
+            return "Brak wolnych zdolności w puli sesji."
+        case .emptyPool:
+            return "Brak wolnych zdolności w puli sesji."
+        }
+    }
+
+    @discardableResult
+    private func grantSessionAbility(
+        _ ability: GameplaySessionAbility,
+        to player: PlayerCharacter
+    ) -> GameplaySessionAbility? {
+        var ids = playerGrantedAbilityIDs[player.id] ?? []
+        defer { playerGrantedAbilityIDs[player.id] = ids.isEmpty ? nil : ids }
+
+        guard let granted = sessionAbilityPool.grant(ability, to: player.id) else { return nil }
+
+        if !ids.contains(granted.id) {
+            ids.append(granted.id)
+            syncAbilityStatCount(for: player.id)
+        } else {
+            checkSessionWinCondition()
+        }
+
+        turnState.logCustomEvent(
+            playerName: player.className,
+            message: "Zdobyto zdolność sesji: \(granted.name) (\(granted.kindLabel))."
+        )
+        return granted
+    }
+
+    private func applyXpShopUnluckyOutcome(_ outcome: XPShopUnluckyKind, to player: PlayerCharacter) -> String {
+        switch outcome {
+        case .halveFinances:
+            guard var stats = playerStats[player.id] else { return "Pech: brak finansów do utraty." }
+            let before = stats.finances
+            stats.finances = max(0, stats.finances / 2)
+            updatePlayerFinances(stats.finances, for: player.id)
+            return "Pech: −50% finansów (\(before) → \(stats.finances) monet)."
+
+        case .queueBlock:
+            let total = (playerQueueBlockRounds[player.id] ?? 0) + 4
+            playerQueueBlockRounds[player.id] = total
+            return "Pech: blokada kolejki na 4 tury."
+
+        case .weakenStrength:
+            applyTemporaryStrengthDebuff(to: player.id, amount: 12, turns: 5)
+            return "Pech: osłabienie siły na 5 tur."
+
+        case .loseRandomAbility:
+            var ids = playerGrantedAbilityIDs[player.id] ?? []
+            guard let removedID = ids.randomElement() else {
+                return "Pech: brak zdolności do utraty."
+            }
+            ids.removeAll { $0 == removedID }
+            playerGrantedAbilityIDs[player.id] = ids.isEmpty ? nil : ids
+            if sessionAbilityPool.ability(id: removedID) != nil {
+                sessionAbilityPool.consume(abilityID: removedID, from: player.id)
+            }
+            syncAbilityStatCount(for: player.id)
+            let name = creatorStore.catalog.abilities.first(where: { $0.id == removedID })?.name
+                ?? sessionAbilityPool.ability(id: removedID)?.name
+                ?? "zdolność"
+            return "Pech: utrata zdolności „\(name)”."
+
+        case .halveStrength:
+            guard var stats = playerStats[player.id] else { return "Pech: brak siły do osłabienia." }
+            let before = stats.strength
+            stats.strength = max(0, stats.strength / 2)
+            setPlayerStats(stats, for: player.id)
+            return "Pech: −50% siły (\(before) → \(stats.strength))."
+
+        case .halveHealth:
+            guard var stats = playerStats[player.id] else { return "Pech: brak zdrowia do utraty." }
+            let before = stats.health
+            stats.health = max(0, stats.health / 2)
+            setPlayerStats(stats, for: player.id)
+            return "Pech: −50% zdrowia (\(before) → \(stats.health))."
+
+        case .removeRandomItem:
+            var owned = playerGrantedItemIDs[player.id] ?? []
+            guard let removedID = owned.randomElement(),
+                  let item = creatorStore.catalog.items.first(where: { $0.id == removedID }) else {
+                return "Pech: brak przedmiotu do usunięcia."
+            }
+            owned.removeAll { $0 == removedID }
+            playerGrantedItemIDs[player.id] = owned.isEmpty ? nil : owned
+            unequipIfNeeded(itemID: removedID, for: player.id)
+            PlayerOwnedItemValues.removeItem(
+                playerID: player.id,
+                itemID: removedID,
+                values: &playerOwnedItemValues
+            )
+            return "Pech: usunięto przedmiot „\(item.name)”."
+        }
+    }
+
+    private func applyTemporaryStrengthDebuff(to playerID: UUID, amount: Int, turns: Int) {
+        guard amount > 0, turns > 0, var stats = playerStats[playerID] else { return }
+        stats.strength = max(0, stats.strength - amount)
+        setPlayerStats(stats, for: playerID)
+
+        var boosts = activeTemporaryBoosts[playerID] ?? []
+        boosts.append(
+            ActiveTemporaryBoost(
+                target: .character,
+                turnsRemaining: turns,
+                strengthDelta: -amount
+            )
+        )
+        activeTemporaryBoosts[playerID] = boosts
     }
 
     private func purchaseShopItem(_ item: CreatedItem) {
@@ -3773,7 +4295,9 @@ struct GameInProgressView: View {
             || bossVictoryPresentation != nil
             || !fallenPlayerQueue.isEmpty
             || isShopOverlayVisible
+            || isXpShopOverlayVisible
             || isPowerPathOverlayVisible
+            || showFinalTurnIntro
 
         canScanGameplayQR = !blocked && activePlayer != nil
     }
@@ -3799,6 +4323,16 @@ struct GameInProgressView: View {
     }
 
     private func presentTurnChangeOverlay(highlightNewRound: Bool? = nil) {
+        if showFinalTurnIntro {
+            syncGameplayQRScanningState()
+            return
+        }
+
+        if shouldCompleteSessionAfterFinalRound() {
+            completeSessionGame()
+            return
+        }
+
         guard let player = activePlayer else {
             syncGameplayQRScanningState()
             return
@@ -4209,16 +4743,38 @@ struct GameInProgressView: View {
 
     private func markCampaignStoryFinished() {
         guard campaignsEnabled else { return }
-        guard !campaignStoryFinished else { return }
-        campaignStoryFinished = true
-        inGameScreen = .campaignEnd
-        startFieldPhase = .hidden
+        markSessionGameOver(showWinnerReveal: sessionWinnerPlayerID != nil)
         turnState.logCustomEvent(
             playerName: "Kampania",
             message: "Fabuła kampanii „\(campaign.title)” zakończona.",
             turnMessage: "Kampania fabularna dobiegła końca — zobacz podsumowanie w zakładce Koniec gry."
         )
-        settings.playStatsRevealSound()
+    }
+
+    private func markSessionGameOver(showWinnerReveal: Bool) {
+        guard !campaignStoryFinished else { return }
+        campaignStoryFinished = true
+        inGameScreen = .campaignEnd
+        sessionEndPhase = showWinnerReveal ? .winnerReveal : .rankings
+        startFieldPhase = .hidden
+        xpShopPhase = .hidden
+        pendingXpShopRoll = nil
+        pendingFinalTurn = false
+        finalTurnRoundActive = false
+        showFinalTurnIntro = false
+
+        if let winnerID = sessionWinnerPlayerID,
+           let winner = players.first(where: { $0.id == winnerID }) {
+            turnState.logCustomEvent(
+                playerName: winner.className,
+                message: "\(winner.displayTitle) wygrał rozgrywkę.",
+                turnMessage: "Koniec gry — zwycięzca: \(winner.displayTitle)."
+            )
+        }
+
+        if !showWinnerReveal {
+            settings.playStatsRevealSound()
+        }
     }
 
     private func finishCampaignSession() {

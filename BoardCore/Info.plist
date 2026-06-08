@@ -10,5 +10,9 @@
 	<string>Aplikacja używa aparatu do skanowania kodów QR, zdjęć minifigurek i trybu AR walki z bossem.</string>
 	<key>NSWorldSensingUsageDescription</key>
 	<string>Tryb AR wykrywa minifigurki na stole podczas walki z bossem.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fredoka.ttf</string>
+	</array>
 </dict>
 </plist>

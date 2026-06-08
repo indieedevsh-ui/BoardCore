@@ -229,6 +229,19 @@ enum PowerPathEngine {
         return playerProgress.experiencePoints - before
     }
 
+    static func spendExperience(
+        _ amount: Int,
+        playerID: UUID,
+        progress: inout [UUID: PlayerPowerPathProgress]
+    ) -> Bool {
+        guard amount > 0 else { return true }
+        var playerProgress = progress[playerID] ?? PlayerPowerPathProgress()
+        guard playerProgress.experiencePoints >= amount else { return false }
+        playerProgress.experiencePoints -= amount
+        progress[playerID] = playerProgress
+        return true
+    }
+
     @discardableResult
     static func grantArtifactExperience(
         playerID: UUID,

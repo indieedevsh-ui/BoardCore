@@ -43,8 +43,10 @@ struct PlayerRuntimeStats: Codable, Hashable {
     static var startingHealth: Int { PlayerElimination.startingHealth }
 
     mutating func applyStartFieldStaying() {
-        let bonus = Int(Double(health) * 0.2)
-        health = min(100, health + max(bonus, 1))
+        let percent = Double(StartFieldRewards.stayHealPercentOfCurrent) / 100.0
+        let bonus = Int(Double(health) * percent)
+        let cap = StartFieldRewards.maxHealth
+        health = min(cap, health + max(bonus, 1))
     }
 
     mutating func applyStartFieldPassReward() {
@@ -76,13 +78,16 @@ struct PlayerRuntimeStats: Codable, Hashable {
         case .artifact:
             break
         case .bossFight:
-            health = max(0, health - 12)
-            strength = min(100, strength + 5)
+            let bossRules = GameRulesRuntime.current.bossFight
+            health = max(0, health + bossRules.scanHealthDelta)
+            strength = min(100, max(0, strength + bossRules.scanStrengthDelta))
         case .shop:
             break
         case .specialCard:
             break
         case .arenaPvP:
+            break
+        case .xpShop:
             break
         }
     }

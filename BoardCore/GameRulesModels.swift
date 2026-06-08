@@ -121,6 +121,15 @@ enum GameRulesRuntime {
     static func update(_ rules: GameRulesConfiguration) {
         current = rules
     }
+
+    static func bossVictoryXP(for difficulty: BossDifficulty) -> Int {
+        let rules = current.bossFight
+        switch difficulty {
+        case .easy: return rules.xpEasy
+        case .medium: return rules.xpMedium
+        case .hard: return rules.xpHard
+        }
+    }
 }
 
 enum GameRulesFieldKind: String, CaseIterable, Identifiable {

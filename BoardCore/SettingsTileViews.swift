@@ -6,11 +6,12 @@
 import SwiftUI
 
 struct SettingsSectionHeader: View {
+    @Environment(AppSettings.self) private var settings
     let title: String
 
     var body: some View {
         Text(title)
-            .font(.headline)
+            .appCartoonTypography(textStyle: .headline)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -28,19 +29,21 @@ struct SettingsSectionFooter: View {
 }
 
 struct SettingsTile<Content: View>: View {
+    @Environment(AppSettings.self) private var settings
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         content()
+            .appCartoonInkOutline()
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            .background {
+                AppStyledSurfaceBackground(
+                    accentStroke: settings.accentColor,
+                    cornerRadius: settings.visualStyle.metrics.tileCornerRadius,
+                    fillOpacity: settings.visualStyle.metrics.fillOpacity,
+                    prominent: false
+                )
             }
     }
 }

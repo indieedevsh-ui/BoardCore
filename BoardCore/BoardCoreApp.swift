@@ -26,8 +26,8 @@ struct BoardCoreApp: App {
     @State private var trikiNavigation = TrikiNavigationCoordinator()
 
     init() {
-        let appSettings = AppSettings()
         AppAppearance.configure()
+        let appSettings = AppSettings()
         let campaignStore = CampaignStore()
         let thinkingPreferences = ThinkingModelPreferences()
         let campaignLLMService = CampaignLLMService()

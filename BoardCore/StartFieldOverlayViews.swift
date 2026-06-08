@@ -29,7 +29,7 @@ struct LiquidGlassButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.headline)
+                .appCartoonTypography(textStyle: .headline)
                 .foregroundStyle(prominent ? .white : settings.accentColor)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)

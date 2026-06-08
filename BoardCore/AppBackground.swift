@@ -16,7 +16,8 @@ struct AppGradientBackground: View {
     var glowColorKey: String?
 
     private var resolvedGlow: Color {
-        glowColor ?? settings.backgroundColor
+        let base = glowColor ?? settings.backgroundColor
+        return settings.visualStyle.screenGlowTint(from: base)
     }
 
     private var resolvedGlowKey: String {
@@ -53,9 +54,13 @@ struct AppGradientBackground: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
+
+                if settings.visualStyle == .cartoon {
+                    CartoonHalftoneDotOverlay()
+                }
             }
         }
-        .id(resolvedGlowKey)
+        .id("\(resolvedGlowKey)-\(settings.visualStyle.rawValue)")
         .ignoresSafeArea()
     }
 
@@ -78,7 +83,14 @@ struct AppBackgroundSync: View {
             .frame(width: 0, height: 0)
             .onAppear {
                 AppAppearance.applyTransparentChrome()
-                AppAppearance.clearViewHierarchyBackgrounds()
+                AppAppearance.applyTabBarAppearance(for: settings.visualStyle)
+                AppAppearance.refreshViewHierarchyBackgrounds()
+            }
+            .onChange(of: settings.visualStyle) { _, newStyle in
+                AppAppearance.applyTabBarAppearance(for: newStyle)
+                DispatchQueue.main.async {
+                    AppAppearance.refreshViewHierarchyBackgrounds()
+                }
             }
     }
 }
@@ -140,7 +152,6 @@ private struct AppThemedScreenModifier: ViewModifier {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .tabBar)
         .containerBackground(.clear, for: .navigation)
     }
 }
@@ -162,7 +173,6 @@ private struct GameplayThemedScreenModifier: ViewModifier {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .tabBar)
         .containerBackground(.clear, for: .navigation)
     }
 }
@@ -187,8 +197,13 @@ private struct AppFormSurfaceModifier: ViewModifier {
 }
 
 enum AppAppearance {
+    private static let visualStyleDefaultsKey = "appVisualStyle"
+    private(set) static var activeVisualStyle: AppVisualStyle = .elegant
+
     static func configure() {
         applyTransparentChrome()
+        let isCartoon = UserDefaults.standard.string(forKey: visualStyleDefaultsKey) == AppVisualStyle.cartoon.rawValue
+        UserDefaults.standard.set(!isCartoon, forKey: "UseFloatingTabBar")
     }
 
     static func applyTransparentChrome() {
@@ -200,11 +215,42 @@ enum AppAppearance {
         UINavigationBar.appearance().scrollEdgeAppearance = navigationBar
         UINavigationBar.appearance().compactAppearance = navigationBar
         UINavigationBar.appearance().isTranslucent = true
+    }
 
+    static func applyTabBarAppearance(for style: AppVisualStyle) {
+        activeVisualStyle = style
+
+        switch style {
+        case .cartoon:
+            applyTransparentTabBarAppearance()
+        case .elegant:
+            UserDefaults.standard.set(true, forKey: "UseFloatingTabBar")
+
+            let tabBar = UITabBarAppearance()
+            tabBar.configureWithTransparentBackground()
+            tabBar.backgroundColor = .clear
+            tabBar.shadowColor = .clear
+            tabBar.backgroundEffect = nil
+            UITabBar.appearance().standardAppearance = tabBar
+            UITabBar.appearance().scrollEdgeAppearance = tabBar
+            UITabBar.appearance().isTranslucent = true
+            UITabBar.appearance().backgroundImage = UIImage()
+            UITabBar.appearance().shadowImage = UIImage()
+        }
+
+        refreshViewHierarchyBackgrounds()
+    }
+
+    static func refreshViewHierarchyBackgrounds() {
+        clearViewHierarchyBackgrounds()
+    }
+
+    private static func applyTransparentTabBarAppearance() {
         let tabBar = UITabBarAppearance()
         tabBar.configureWithTransparentBackground()
         tabBar.backgroundColor = .clear
         tabBar.shadowColor = .clear
+        tabBar.backgroundEffect = nil
         UITabBar.appearance().standardAppearance = tabBar
         UITabBar.appearance().scrollEdgeAppearance = tabBar
         UITabBar.appearance().isTranslucent = true
@@ -321,5 +367,10 @@ extension AppSettings {
         let hapticScale = adding ? 0.42 : 0.36
         HapticManager.playButtonTap(intensity: hapticIntensity * hapticScale * min(1, 0.35 + Double(count) * 0.04))
         SoundManager.playCoinPaperTicks(volume: volume, adding: adding, count: count)
+    }
+
+    func playCartoonToggleSound(turningOn: Bool) {
+        HapticManager.playCartoonToggle(intensity: hapticIntensity, turningOn: turningOn)
+        SoundManager.playCartoonToggle(volume: volume, turningOn: turningOn)
     }
 }

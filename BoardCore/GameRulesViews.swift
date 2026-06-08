@@ -45,6 +45,9 @@ struct GameRulesHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .appThemedScreen()
         .onAppear { draft = creatorStore.gameRules }
+        .onChange(of: draft) { _, newValue in
+            creatorStore.updateGameRules(newValue)
+        }
         .alert("Zapisano", isPresented: $savedConfirmation) {
             Button("OK", role: .cancel) { settings.playTapSound() }
         }
@@ -70,11 +73,17 @@ struct GameRulesHomeView: View {
 }
 
 struct GameRulesFieldEditorView: View {
+    @Environment(CreatorStore.self) private var creatorStore
+
     let kind: GameRulesFieldKind
     @Binding var rules: GameRulesConfiguration
 
     private var accent: Color {
         Color(red: kind.themeColor.red, green: kind.themeColor.green, blue: kind.themeColor.blue)
+    }
+
+    private func syncLiveRules() {
+        creatorStore.updateGameRules(rules)
     }
 
     var body: some View {
@@ -94,58 +103,62 @@ struct GameRulesFieldEditorView: View {
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .appThemedScreen()
+        .onChange(of: rules) { _, newValue in
+            creatorStore.updateGameRules(newValue)
+        }
+        .onDisappear { syncLiveRules() }
     }
 
     private var startFieldSection: some View {
         Group {
-            CreatorPillNumericField(label: "Monety za przejście", value: $rules.startField.passCoins, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "Monety przy pełnym zdrowiu (zostając)", value: $rules.startField.stayAtFullHealthCoins, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "XP przy pełnym zdrowiu", value: $rules.startField.stayAtFullHealthXP, range: 0...999, accentColor: accent)
-            CreatorPillNumericField(label: "Maks. zdrowie (pełne HP)", value: $rules.startField.maxHealth, range: 1...999, accentColor: accent)
-            CreatorPillNumericField(label: "Leczenie % aktualnego HP (zostając)", value: $rules.startField.stayHealPercentOfCurrent, range: 1...100, accentColor: accent)
-            CreatorPillNumericField(label: "XP za wizytę na polu start", value: $rules.startField.xpPerVisit, range: 0...999, accentColor: accent)
-            CreatorPillNumericField(label: "Co ile wizyt otwiera ścieżkę mocy", value: $rules.startField.powerPathEveryVisits, range: 1...20, accentColor: accent)
+            CreatorPillNumericField(label: "Monety za przejście", value: $rules.startField.passCoins, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Monety przy pełnym zdrowiu (zostając)", value: $rules.startField.stayAtFullHealthCoins, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP przy pełnym zdrowiu", value: $rules.startField.stayAtFullHealthXP, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Maks. zdrowie (pełne HP)", value: $rules.startField.maxHealth, range: 1...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Leczenie % aktualnego HP (zostając)", value: $rules.startField.stayHealPercentOfCurrent, range: 1...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za wizytę na polu start", value: $rules.startField.xpPerVisit, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Co ile wizyt otwiera ścieżkę mocy", value: $rules.startField.powerPathEveryVisits, range: 1...20, accentColor: accent, onCommit: syncLiveRules)
         }
     }
 
     private var shopSection: some View {
-        CreatorPillNumericField(label: "Maks. ofert w sklepie", value: $rules.shop.maxOffers, range: 1...20, accentColor: accent)
+        CreatorPillNumericField(label: "Maks. ofert w sklepie", value: $rules.shop.maxOffers, range: 1...20, accentColor: accent, onCommit: syncLiveRules)
     }
 
     private var bossSection: some View {
         Group {
-            CreatorPillNumericField(label: "Zmiana zdrowia po skanowaniu", value: $rules.bossFight.scanHealthDelta, range: -100...100, accentColor: accent)
-            CreatorPillNumericField(label: "Zmiana siły po skanowaniu", value: $rules.bossFight.scanStrengthDelta, range: -100...100, accentColor: accent)
-            CreatorPillNumericField(label: "% nagrody dla głównego walczącego", value: $rules.bossFight.victoryFinanceMainPercent, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "% nagrody dla wspierających", value: $rules.bossFight.victoryFinanceSupportPercent, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "XP za zwycięstwo (łatwy)", value: $rules.bossFight.xpEasy, range: 0...999, accentColor: accent)
-            CreatorPillNumericField(label: "XP za zwycięstwo (średni)", value: $rules.bossFight.xpMedium, range: 0...999, accentColor: accent)
-            CreatorPillNumericField(label: "XP za zwycięstwo (trudny)", value: $rules.bossFight.xpHard, range: 0...999, accentColor: accent)
+            CreatorPillNumericField(label: "Zmiana zdrowia po skanowaniu", value: $rules.bossFight.scanHealthDelta, range: -100...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Zmiana siły po skanowaniu", value: $rules.bossFight.scanStrengthDelta, range: -100...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "% nagrody dla głównego walczącego", value: $rules.bossFight.victoryFinanceMainPercent, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "% nagrody dla wspierających", value: $rules.bossFight.victoryFinanceSupportPercent, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za zwycięstwo (łatwy)", value: $rules.bossFight.xpEasy, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za zwycięstwo (średni)", value: $rules.bossFight.xpMedium, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za zwycięstwo (trudny)", value: $rules.bossFight.xpHard, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
         }
     }
 
     private var artifactSection: some View {
         Group {
-            FieldCategoryOddsEditor(title: "Szanse losowania", odds: $rules.artifact.categoryOdds, accentColor: accent)
-            CreatorPillNumericField(label: "Monety — min", value: $rules.artifact.financesMin, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "Monety — max", value: $rules.artifact.financesMax, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "Statystyka — min", value: $rules.artifact.statBoostMin, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Statystyka — max", value: $rules.artifact.statBoostMax, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Pech HP — min", value: $rules.artifact.misfortuneHealthMin, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Pech HP — max", value: $rules.artifact.misfortuneHealthMax, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Pech siła — min", value: $rules.artifact.misfortuneStrengthMin, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Pech siła — max", value: $rules.artifact.misfortuneStrengthMax, range: 0...100, accentColor: accent)
-            CreatorPillNumericField(label: "Pech monety — min", value: $rules.artifact.misfortuneFundMin, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "Pech monety — max", value: $rules.artifact.misfortuneFundMax, range: 0...9999, accentColor: accent)
-            CreatorPillNumericField(label: "XP za losowanie", value: $rules.artifact.drawXP, range: 0...999, accentColor: accent)
+            FieldCategoryOddsEditor(title: "Szanse losowania", odds: $rules.artifact.categoryOdds, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Monety — min", value: $rules.artifact.financesMin, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Monety — max", value: $rules.artifact.financesMax, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Statystyka — min", value: $rules.artifact.statBoostMin, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Statystyka — max", value: $rules.artifact.statBoostMax, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech HP — min", value: $rules.artifact.misfortuneHealthMin, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech HP — max", value: $rules.artifact.misfortuneHealthMax, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech siła — min", value: $rules.artifact.misfortuneStrengthMin, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech siła — max", value: $rules.artifact.misfortuneStrengthMax, range: 0...100, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech monety — min", value: $rules.artifact.misfortuneFundMin, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "Pech monety — max", value: $rules.artifact.misfortuneFundMax, range: 0...9999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za losowanie", value: $rules.artifact.drawXP, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
         }
     }
 
     private var specialCardSection: some View {
         Group {
-            FieldCategoryOddsEditor(title: "Szanse kategorii karty", odds: $rules.specialCard.categoryOdds, accentColor: accent)
-            CreatorPillNumericField(label: "XP za kartę pozytywną", value: $rules.specialCard.positiveXP, range: 0...999, accentColor: accent)
-            CreatorPillNumericField(label: "XP za kartę negatywną", value: $rules.specialCard.negativeXP, range: 0...999, accentColor: accent)
+            FieldCategoryOddsEditor(title: "Szanse kategorii karty", odds: $rules.specialCard.categoryOdds, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za kartę pozytywną", value: $rules.specialCard.positiveXP, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
+            CreatorPillNumericField(label: "XP za kartę negatywną", value: $rules.specialCard.negativeXP, range: 0...999, accentColor: accent, onCommit: syncLiveRules)
 
             NavigationLink {
                 SpecialCardRulesListView(cards: $rules.specialCard.customCards, accent: accent)
@@ -236,6 +249,7 @@ struct SpecialCardDraft {
 
 struct SpecialCardRulesListView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(CreatorStore.self) private var creatorStore
     @Binding var cards: [SpecialCardDefinition]
     let accent: Color
 
@@ -295,9 +309,19 @@ struct SpecialCardRulesListView: View {
                     } else if let index = cards.firstIndex(where: { $0.id == saved.id }) {
                         cards[index] = saved
                     }
+                    syncCardsToLiveRules()
                 }
             )
         }
+        .onChange(of: cards) { _, _ in
+            syncCardsToLiveRules()
+        }
+    }
+
+    private func syncCardsToLiveRules() {
+        var rules = creatorStore.gameRules
+        rules.specialCard.customCards = cards
+        creatorStore.updateGameRules(rules)
     }
 }
 

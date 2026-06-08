@@ -23,7 +23,7 @@ struct BossSelectionView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Wybierz bossa")
                             .font(.largeTitle.bold())
-                        Text("Poziom trudności wpływa na HP, obrażenia i zdolności bossa.")
+                        Text("Poziom trudności wpływa na statystyki bossa i nagrodę XP po zwycięstwie.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -65,12 +65,16 @@ struct BossSelectionView: View {
             settings.playTapSound()
             onSelect(boss)
         } label: {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    Image(systemName: boss.difficulty.icon)
-                        .font(.title)
-                        .foregroundStyle(settings.accentColor)
-                        .frame(width: 44)
+                    ZStack {
+                        Circle()
+                            .fill(settings.accentColor.opacity(0.18))
+                            .frame(width: 52, height: 52)
+                        Image(systemName: boss.difficulty.icon)
+                            .font(.title2)
+                            .foregroundStyle(settings.accentColor)
+                    }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(boss.difficulty.title)
@@ -85,18 +89,17 @@ struct BossSelectionView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 20) {
-                    statPill(icon: "heart.fill", label: "HP bossa", value: "\(boss.maxHP)", color: .green)
-                    statPill(icon: "bolt.fill", label: "Siła", value: "\(boss.combatStrength)", color: .red)
-                    if boss.difficulty.maxSpecialAbilityUses > 0 {
-                        statPill(
-                            icon: "sparkles",
-                            label: "Zdolność",
-                            value: "1×",
-                            color: .blue
-                        )
-                    }
-                }
+                BossStatsRow(
+                    health: boss.maxHP,
+                    strength: boss.combatStrength,
+                    abilities: boss.difficulty.maxSpecialAbilityUses,
+                    experience: boss.difficulty.victoryXPPool,
+                    healthRingMax: max(200, boss.maxHP)
+                )
+
+                Text("Współpraca: 80% XP i monet dla gospodarza · 20% dla każdego uczestnika")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,15 +111,103 @@ struct BossSelectionView: View {
             chargeProgress: highlightedDifficulty == boss.difficulty ? trikiHoldChargeProgress : 0
         )
     }
+}
 
-    private func statPill(icon: String, label: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(label, systemImage: icon)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline.bold())
-                .foregroundStyle(color)
+private struct BossStatsRow: View {
+    let health: Int
+    let strength: Int
+    let abilities: Int
+    let experience: Int
+    let healthRingMax: Int
+
+    var body: some View {
+        HStack(spacing: 0) {
+            BossStatCircle(
+                label: "Zdrowie",
+                icon: "heart.fill",
+                value: health,
+                color: .green,
+                ringMax: healthRingMax
+            )
+            BossStatCircle(
+                label: "Siła",
+                icon: "bolt.fill",
+                value: strength,
+                color: .red,
+                ringMax: 40
+            )
+            BossStatCircle(
+                label: "Zdolność",
+                icon: "sparkles",
+                value: abilities,
+                color: .blue,
+                ringMax: max(1, abilities)
+            )
+            BossStatCircle(
+                label: "XP",
+                icon: "star.circle.fill",
+                value: experience,
+                color: .purple,
+                ringMax: max(80, experience)
+            )
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.white.opacity(0.04))
+        )
+    }
+}
+
+private struct BossStatCircle: View {
+    let label: String
+    let icon: String
+    let value: Int
+    let color: Color
+    let ringMax: Int
+
+    private var ringProgress: CGFloat {
+        guard ringMax > 0 else { return 0 }
+        return CGFloat(min(max(value, 0), ringMax)) / CGFloat(ringMax)
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(color.opacity(0.22), lineWidth: 4)
+                    .frame(width: 58, height: 58)
+                Circle()
+                    .trim(from: 0, to: ringProgress)
+                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 58, height: 58)
+                VStack(spacing: 1) {
+                    Image(systemName: icon)
+                        .font(.caption2)
+                        .foregroundStyle(color.opacity(0.9))
+                    Text(displayValue)
+                        .font(.caption.bold())
+                        .minimumScaleFactor(0.55)
+                        .lineLimit(1)
+                }
+            }
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(width: 72)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var displayValue: String {
+        if label == "Zdolność", value == 0 {
+            return "—"
+        }
+        return "\(value)"
     }
 }

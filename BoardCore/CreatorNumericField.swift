@@ -10,6 +10,7 @@ struct CreatorPillNumericField: View {
     @Binding var value: Int
     var range: ClosedRange<Int> = 0...9999
     var accentColor: Color
+    var onCommit: (() -> Void)? = nil
 
     @State private var text = ""
     @FocusState private var isFocused: Bool
@@ -62,6 +63,7 @@ struct CreatorPillNumericField: View {
         if filtered != String(clamped) {
             text = String(clamped)
         }
+        onCommit?()
     }
 }
 
@@ -71,16 +73,17 @@ struct FieldCategoryOddsEditor: View {
     let title: String
     @Binding var odds: FieldCategoryOdds
     var accentColor: Color
+    var onCommit: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-            CreatorPillNumericField(label: "Szansa: Zdolność (%)", value: $odds.abilityPercent, range: 0...100, accentColor: accentColor)
-            CreatorPillNumericField(label: "Szansa: Fundusze (%)", value: $odds.financesPercent, range: 0...100, accentColor: accentColor)
-            CreatorPillNumericField(label: "Szansa: Statystyka (%)", value: $odds.statisticsPercent, range: 0...100, accentColor: accentColor)
-            CreatorPillNumericField(label: "Szansa: Pechowy los (%)", value: $odds.misfortunePercent, range: 0...100, accentColor: accentColor)
+            CreatorPillNumericField(label: "Szansa: Zdolność (%)", value: $odds.abilityPercent, range: 0...100, accentColor: accentColor, onCommit: onCommit)
+            CreatorPillNumericField(label: "Szansa: Fundusze (%)", value: $odds.financesPercent, range: 0...100, accentColor: accentColor, onCommit: onCommit)
+            CreatorPillNumericField(label: "Szansa: Statystyka (%)", value: $odds.statisticsPercent, range: 0...100, accentColor: accentColor, onCommit: onCommit)
+            CreatorPillNumericField(label: "Szansa: Pechowy los (%)", value: $odds.misfortunePercent, range: 0...100, accentColor: accentColor, onCommit: onCommit)
             Text("Suma: \(odds.abilityPercent + odds.financesPercent + odds.statisticsPercent + odds.misfortunePercent)%")
                 .font(.caption)
                 .foregroundStyle(.secondary)

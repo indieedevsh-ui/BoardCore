@@ -81,6 +81,12 @@ enum BossDifficulty: String, CaseIterable, Identifiable {
         case .hard: 180
         }
     }
+
+    /// Pula XP za pokonanie bossa (wartość z reguł gry w DevCentrum).
+    @MainActor
+    var victoryXPPool: Int {
+        GameRulesRuntime.bossVictoryXP(for: self)
+    }
 }
 
 struct BossDefinition: Identifiable, Equatable {
@@ -199,12 +205,26 @@ enum BossFightStatsCalculator {
         return total
     }
 
+    @MainActor
     static func financeRewardSplit(totalPool: Int, supporterCount: Int) -> (mainShare: Int, supporterShare: Int) {
+        cooperativeRewardSplit(totalPool: totalPool, supporterCount: supporterCount)
+    }
+
+    @MainActor
+    static func experienceRewardSplit(totalPool: Int, supporterCount: Int) -> (mainShare: Int, supporterShare: Int) {
+        cooperativeRewardSplit(totalPool: totalPool, supporterCount: supporterCount)
+    }
+
+    @MainActor
+    private static func cooperativeRewardSplit(totalPool: Int, supporterCount: Int) -> (mainShare: Int, supporterShare: Int) {
         guard supporterCount > 0 else {
             return (totalPool, 0)
         }
-        let mainShare = Int((Double(totalPool) * 0.8).rounded())
-        let supporterShare = Int((Double(totalPool) * 0.2).rounded())
+        let rules = GameRulesRuntime.current.bossFight
+        let mainRatio = Double(max(0, rules.victoryFinanceMainPercent)) / 100.0
+        let supportRatio = Double(max(0, rules.victoryFinanceSupportPercent)) / 100.0
+        let mainShare = Int((Double(totalPool) * mainRatio).rounded())
+        let supporterShare = Int((Double(totalPool) * supportRatio).rounded())
         return (mainShare, supporterShare)
     }
 

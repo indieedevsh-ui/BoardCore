@@ -69,6 +69,37 @@ struct SettingsView: View {
                     SettingsSectionHeader(title: "Wygląd")
 
                     SettingsTile {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Picker("Styl aplikacji", selection: $settings.visualStyle) {
+                                ForEach(AppVisualStyle.allCases) { style in
+                                    Text(style.title).tag(style)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            HStack(spacing: 10) {
+                                Image(systemName: settings.visualStyle.icon)
+                                    .font(.title3)
+                                    .foregroundStyle(settings.accentColor)
+                                Text(settings.visualStyle.subtitle)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            HStack(spacing: 12) {
+                                Button("Przycisk") { settings.playTapSound() }
+                                    .buttonStyle(.appProminent)
+                                Button("Opcja") { settings.playTapSound() }
+                                    .buttonStyle(.appSecondary)
+                            }
+                        }
+                    }
+
+                    SettingsSectionFooter(
+                        text: "Elegancki — szklisty wygląd z pływającym paskiem zakładek. Kreskówkowy — grube obrysy, żywe kolory i czarny pasek zakładek przy dole ekranu."
+                    )
+
+                    SettingsTile {
                         VStack(alignment: .leading, spacing: 12) {
                             ColorPicker(
                                 "Kolor poświaty (góra ekranu)",
@@ -110,7 +141,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "speaker.fill")
                                     .foregroundStyle(.secondary)
-                                Slider(value: $settings.volume, in: 0...1)
+                                AppSlider(value: $settings.volume, in: 0...1)
                                 Image(systemName: "speaker.wave.3.fill")
                                     .foregroundStyle(.secondary)
                             }
@@ -126,7 +157,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "hand.tap.fill")
                                     .foregroundStyle(.secondary)
-                                Slider(value: $settings.hapticIntensity, in: 0...1)
+                                AppSlider(value: $settings.hapticIntensity, in: 0...1)
                                 Image(systemName: "iphone.radiowaves.left.and.right")
                                     .foregroundStyle(.secondary)
                             }
